@@ -9,7 +9,7 @@ EPS = 1.0e-300
 NumericType = Union[float, int]
 SQR2, SQR2PI = np.sqrt(2), np.sqrt(2 * np.pi)
 
-CategoricalHPType = CSH.CategoricalHyperparameter
+CategoricalHPType = Union[CSH.CategoricalHyperparameter]
 NumericalHPType = Union[
     CSH.UniformIntegerHyperparameter, CSH.UniformFloatHyperparameter, CSH.OrdinalHyperparameter,
 ]

@@ -8,8 +8,8 @@ from parzen_estimator.constants import (
     EPS,
     NumericType,
     NumericalHPType,
-    SQR2PI,
     SQR2,
+    SQR2PI,
     uniform_weight,
 )
 from parzen_estimator.utils import erf, exp, log
@@ -17,7 +17,7 @@ from parzen_estimator.utils import erf, exp, log
 
 def calculate_norm_consts(
     lb: NumericType, ub: NumericType, means: np.ndarray, stds: np.ndarray
-) -> Tuple[NumericType, NumericType]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Args:
         lb (NumericType):
@@ -30,10 +30,10 @@ def calculate_norm_consts(
             The bandwidth value for each kernel basis. The shape is (n_samples, ).
 
     Returns:
-        norm_consts (NumericType):
-            The normalization constant of each kernel due to the truncation.
-        logpdf_consts (NumericType):
-            The constant for loglikelihood computation.
+        norm_consts (np.ndarray):
+            The normalization constants of each kernel due to the truncation.
+        logpdf_consts (np.ndarray):
+            The constants for loglikelihood computation.
     """
     zl = (lb - means) / (SQR2 * stds)
     zu = (ub - means) / (SQR2 * stds)

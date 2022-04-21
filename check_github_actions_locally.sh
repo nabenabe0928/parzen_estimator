@@ -9,5 +9,6 @@ run_check() {
 }
 
 target="parzen_estimator"  # target must be modified accordingly
-run_check "pytest" "python -m pytest -W ignore"
+run_check "pre-commit" "pre-commit run --all-files"
+run_check "pytest" "python -m pytest -W ignore --cov-report term-missing --cov=$target --cov-config=.coveragerc"
 run_check "black" "black test/ $target/"

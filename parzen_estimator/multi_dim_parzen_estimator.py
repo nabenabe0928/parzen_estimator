@@ -2,12 +2,12 @@ from typing import Dict, List, Literal, Union
 
 import numpy as np
 
-from scipy.stats.qmc import LatinHypercube as LHS
-from scipy.stats.qmc import Sobol
-
 from parzen_estimator import CategoricalParzenEstimator, NumericalParzenEstimator
 from parzen_estimator.constants import uniform_weight
 from parzen_estimator.loglikelihoods import compute_config_loglikelihoods
+
+from scipy.stats.qmc import LatinHypercube as LHS
+from scipy.stats.qmc import Sobol
 
 
 SAMPLING_CHOICES = {"sobol": Sobol, "lhs": LHS}
@@ -36,10 +36,9 @@ class MultiDimensionParzenEstimator:
         self._hypervolume = self._calculate_hypervolume()
 
     def __repr__(self) -> str:
-        return "\n".join([
-            f"({idx + 1}): {hp_name}\n{pe}"
-            for idx, (hp_name, pe) in enumerate(self._parzen_estimators.items())
-        ])
+        return "\n".join(
+            [f"({idx + 1}): {hp_name}\n{pe}" for idx, (hp_name, pe) in enumerate(self._parzen_estimators.items())]
+        )
 
     def _calculate_hypervolume(self) -> float:
         hypervolume = 1.0
@@ -122,7 +121,7 @@ class MultiDimensionParzenEstimator:
         self,
         n_samples: int,
         rng: np.random.RandomState,
-        sampling_method: Literal[tuple(SAMPLING_CHOICES.keys())] = "sobol"  # type: ignore
+        sampling_method: Literal[tuple(SAMPLING_CHOICES.keys())] = "sobol",  # type: ignore
     ) -> List[np.ndarray]:
         """
         Sample points using latin hypercube sampling.

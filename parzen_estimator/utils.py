@@ -3,10 +3,10 @@ from typing import Optional
 import numpy as np
 
 from torch import as_tensor
-from torch import log as torch_log
-from torch import logsumexp as torch_logsumexp
 from torch import erf as torch_erf
 from torch import exp as torch_exp
+from torch import log as torch_log
+from torch import logsumexp as torch_logsumexp
 
 
 # torch implementation is quicker than that of numpy!

@@ -8,4 +8,4 @@ incumbents/
 
 build/
 dist/
-tpe.egg-info/
+parzen_estimator.egg-info/
