@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import unittest
 
 import ConfigSpace.hyperparameters as CSH
@@ -26,14 +27,8 @@ class TestNumericalParzenEstimator(unittest.TestCase):
             dict(samples=np.array([2]), lb=-3.0, ub=3.0, dtype=None),
         ]
         for kwargs in kwargs_dict:
-            try:
+            with pytest.raises(ValueError):
                 NumericalParzenEstimator(**kwargs)
-            except ValueError:
-                pass
-            except Exception:
-                raise ValueError("test_init failed.")
-            else:
-                raise ValueError("The error was not raised.")
 
     def test_cdf_discrete(self) -> None:
         lb, ub = -50, 50
@@ -206,19 +201,58 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         bll = pe.basis_loglikelihood(np.linspace(lb, ub, 100000))
         assert 0.99 <= np.exp(bll).mean() * (ub - lb) <= 1.01
 
+    def test_pdf(self) -> None:
+        lb, ub = -3, 3
+        samples = np.array([0, 1, 2, 3] * 10)
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub)
+        x = np.linspace(-3, 3, 1000)
+        bll = pe.basis_loglikelihood(x)
+        # Calculate integral
+        assert 0.99 < pe.pdf(x).mean() * (ub - lb) < 1.01
+        assert np.allclose(np.exp(bll).mean(axis=0), pe.pdf(x))
+
+        lb, ub = -3, 3
+        samples = np.array([0, 1, 2, 3] * 10)
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1)
+        x = np.arange(-3, 4)
+        bll = pe.basis_loglikelihood(x)
+        # Calculate integral
+        assert 0.99 < pe.pdf(x).sum() < 1.01
+        assert np.allclose(np.exp(bll).mean(axis=0), pe.pdf(x))
+
+    def test_sample_by_indices(self) -> None:
+        lb, ub = -10, 10
+        samples = np.arange(-10, 11)
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1)
+        pe._stds = np.full_like(pe._stds, 1e-12)
+        rng = np.random.RandomState()
+        indices = np.arange(pe.size)
+        assert np.allclose(pe.sample_by_indices(rng, indices), pe._means)
+
+        lb, ub = -1, 1
+        samples = np.linspace(-1, 1, 100)
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub)
+        pe._stds = np.full_like(pe._stds, 1e-12)
+        rng = np.random.RandomState()
+        indices = np.arange(pe.size)
+        assert np.allclose(pe.sample_by_indices(rng, indices), pe._means)
+
+    def test_uniform_to_valid_range(self) -> None:
+        lb, ub = -3, 3
+        samples = np.arange(-3, 4)
+        ans = np.arange(-3, 4)
+        for q in [1, None]:
+            pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1)
+            x = np.linspace(0, 1, pe.domain_size + 1)
+            assert np.allclose(pe.uniform_to_valid_range(x), ans)
+
 
 class TestCategoricalParzenEstimator(unittest.TestCase):
     def test_init(self) -> None:
         samples_set = [np.array([5]), np.array([1.0]), np.array(["hoge"])]
         for samples in samples_set:
-            try:
+            with pytest.raises(ValueError):
                 CategoricalParzenEstimator(samples=samples, n_choices=4, top=0.7)
-            except ValueError:
-                pass
-            except Exception:
-                raise ValueError("test_init failed.")
-            else:
-                raise ValueError("The error was not raised.")
 
     def test_sample(self) -> None:
         rng = np.random.RandomState()
@@ -279,6 +313,39 @@ class TestCategoricalParzenEstimator(unittest.TestCase):
         bll = pe.basis_loglikelihood(np.arange(4))
         assert 0.99 <= np.exp(bll).mean() * 4 <= 1.01
 
+    def test_uniform_to_valid_range(self) -> None:
+        samples = np.array([0, 1, 2, 3] * 3)
+        ans = np.arange(4)
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=0.7)
+        x = np.linspace(0, 1, pe.domain_size)
+        assert np.allclose(pe.uniform_to_valid_range(x), ans)
+
+    def test_pdf(self) -> None:
+        samples = np.array([0, 1, 2, 3] * 10)
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=0.7)
+        assert pe.size == 41
+        x = np.arange(4)
+        # Calculate integral
+        assert 0.99 < pe.pdf(x).sum() < 1.01
+        assert np.allclose(pe.pdf(x), [0.25] * 4)
+
+        samples = np.array([0])
+        top = 0.7
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=top)
+        x = np.arange(4)
+        # Calculate integral
+        assert 0.99 < pe.pdf(x).sum() < 1.01
+        high = (top + 0.25) / 2
+        assert np.allclose(pe.pdf(x), [high] + [(1 - high) / 3] * 3)
+
+    def test_sample_by_indices(self) -> None:
+        samples = np.array([0, 1, 2, 3])
+        ans = samples.copy()
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=1.0)
+        rng = np.random.RandomState()
+        indices = np.arange(pe.size - 1)
+        assert np.allclose(pe.sample_by_indices(rng, indices), ans)
+
 
 class TestBuildParzenEstimators(unittest.TestCase):
     def build_npe(self, vals: np.ndarray, config: NumericalHPType) -> NumericalParzenEstimator:
@@ -298,12 +365,8 @@ class TestBuildParzenEstimators(unittest.TestCase):
         C = CSH.CategoricalHyperparameter("c1", choices=["a", "b", "c"])
         vals = [1]
 
-        try:
+        with pytest.raises(ValueError):
             build_categorical_parzen_estimator(config=C, vals=vals)
-        except ValueError:
-            pass
-        else:
-            raise ValueError("The error was not raised.")
 
         s_vals = ["a", "b", "c"]
         try:
@@ -344,6 +407,11 @@ class TestBuildParzenEstimators(unittest.TestCase):
         pe = self.build_npe(vals, x)
         assert pe._q is None
         self._check(pe._lb - np.log(lb), pe._ub - np.log(ub))
+
+        vals = np.arange(2, 20)
+        x = CSH.UniformIntegerHyperparameter("x", lower=2, upper=30, q=2)
+        with pytest.raises(ValueError):
+            pe = self.build_npe(vals, x)
 
 
 if __name__ == "__main__":

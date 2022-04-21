@@ -165,7 +165,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
     def pdf(self, x: np.ndarray) -> np.ndarray:
         if self._q is None:
-            norm_consts = self._norm_consts  # noqa: F841
+            norm_consts = self._norm_consts / (SQR2PI * self._stds)  # noqa: F841
             mahalanobis = ((x[:, np.newaxis] - self._means) / self._stds) ** 2  # noqa: F841
             return self._weight * np.sum(norm_consts * exp(-0.5 * mahalanobis), axis=-1)
         else:
@@ -291,7 +291,8 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         return f"CategoricalParzenEstimator(n_choices={self._n_choices}, top={self._top}, probs={self._probs})"
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
-        scaled_x = x * self._n_choices
+        scaled_x = x * (self._n_choices - 1)
+        print(scaled_x)
         return scaled_x.astype(self._dtype)
 
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
