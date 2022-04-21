@@ -16,5 +16,5 @@ NumericalHPType = Union[
 HPType = Union[CategoricalHPType, NumericalHPType]
 
 
-def uniform_weight(size: int) -> np.ndarray:
-    return np.full(size, 1.0 / size)
+def uniform_weight(size: int) -> float:
+    return 1.0 / size

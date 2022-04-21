@@ -3,8 +3,6 @@ from typing import Optional, Tuple, Type, Union
 
 import numpy as np
 
-from scipy.special import erf
-
 from parzen_estimator.constants import (
     CategoricalHPType,
     EPS,
@@ -14,6 +12,7 @@ from parzen_estimator.constants import (
     SQR2,
     uniform_weight,
 )
+from parzen_estimator.utils import erf, exp, log
 
 
 def calculate_norm_consts(
@@ -39,13 +38,46 @@ def calculate_norm_consts(
     zl = (lb - means) / (SQR2 * stds)
     zu = (ub - means) / (SQR2 * stds)
     norm_consts = 2.0 / (erf(zu) - erf(zl))
-    logpdf_consts = np.log(norm_consts / (SQR2PI * stds))
+    logpdf_consts = log(norm_consts / (SQR2PI * stds))
     return norm_consts, logpdf_consts
 
 
 class AbstractParzenEstimator(metaclass=ABCMeta):
     @abstractmethod
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
+        raise NotImplementedError
+
+    @abstractmethod
+    def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
+        """
+        Convert the uniform samples [0, 1] into valid range.
+
+        Args:
+            x (np.ndarray):
+                uniform samples in [0, 1].
+                The shape is (n_samples, ).
+
+        Returns:
+            converted_x (np.ndarray):
+                Converted values.
+                The shape is (n_samples, ).
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def pdf(self, x: np.ndarray) -> np.ndarray:
+        """
+        Compute the probability density values for each data point.
+
+        Args:
+            x (np.ndarray): The sampled values to compute density values
+                            The shape is (n_samples, )
+
+        Returns:
+            pdf_vals (np.ndarray):
+                The density values given sampled values
+                The shape is (n_samples, )
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -72,6 +104,16 @@ class AbstractParzenEstimator(metaclass=ABCMeta):
         """
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def domain_size(self) -> NumericType:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def size(self) -> int:
+        raise NotImplementedError
+
 
 class NumericalParzenEstimator(AbstractParzenEstimator):
     def __init__(
@@ -85,7 +127,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
-        # TODO: Add tests
+        self._size = samples.size + 1
         dtype_choices = (np.int32, np.int64, np.float32, np.float64)
         self._dtype: Type[np.number]
         if dtype is int:
@@ -98,13 +140,18 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
             raise ValueError(f"dtype for NumericalParzenEstimator must be {dtype_choices}, but got {dtype}")
         if np.any(samples < lb) or np.any(samples > ub):
             raise ValueError(f"All the samples must be in [{lb}, {ub}].")
+        if q is not None:
+            cands = np.unique(samples)
+            converted_cands = np.round(cands / q) * q
+            if not np.allclose(cands, converted_cands):
+                raise ValueError("All the samples for q != None must be discritized appropriately.")
 
         self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor)
 
     def __repr__(self) -> str:
         ret = f"NumericalParzenEstimator(\n\tlb={self._lb}, ub={self._ub}, q={self._q},\n"
-        for i, (w, m, s) in enumerate(zip(self._weights, self._means, self._stds)):
-            ret += f"\t({i + 1}) weight: {w}, basis: GaussKernel(mean={m}, std={s}),\n"
+        for i, (m, s) in enumerate(zip(self._means, self._stds)):
+            ret += f"\t({i + 1}) weight: {self._weight}, basis: GaussKernel(mean={m}, std={s}),\n"
         return ret + ")"
 
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
@@ -114,7 +161,17 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         else:
             integral_u = self.cdf(np.minimum(x + 0.5 * self._q, self._ub))
             integral_l = self.cdf(np.maximum(x - 0.5 * self._q, self._lb))
-            return np.log(integral_u - integral_l + EPS)
+            return log(integral_u - integral_l + EPS)
+
+    def pdf(self, x: np.ndarray) -> np.ndarray:
+        if self._q is None:
+            norm_consts = self._norm_consts  # noqa: F841
+            mahalanobis = ((x[:, np.newaxis] - self._means) / self._stds) ** 2  # noqa: F841
+            return self._weight * np.sum(norm_consts * exp(-0.5 * mahalanobis), axis=-1)
+        else:
+            integral_u = self.cdf(np.minimum(x + 0.5 * self._q, self._ub))
+            integral_l = self.cdf(np.maximum(x - 0.5 * self._q, self._lb))
+            return self._weight * np.sum(integral_u - integral_l, axis=0)
 
     def cdf(self, x: np.ndarray) -> np.ndarray:
         """
@@ -129,7 +186,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                 cdf[i] = integral[from -inf to x[i]] pdf(x') dx'
         """
         z = (x - self._means[:, np.newaxis]) / (SQR2 * self._stds[:, np.newaxis])
-        return self._norm_consts[:, np.newaxis] * 0.5 * (1.0 + erf(z))
+        norm_consts = self._norm_consts[:, np.newaxis]
+        return norm_consts * 0.5 * (1.0 + erf(z))
 
     def _sample(self, rng: np.random.RandomState, idx: int) -> NumericType:
         while True:
@@ -138,10 +196,17 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                 return val if self._q is None else np.round(val / self._q) * self._q
 
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
-        samples = [
-            self._sample(rng, active) for active in rng.choice(self._weights.size, p=self._weights, size=n_samples)
-        ]
+        weights = np.full(self.size, self._weight)
+        samples = [self._sample(rng, active) for active in rng.choice(self.size, p=weights, size=n_samples)]
         return np.array(samples, dtype=self._dtype)
+
+    def sample_by_indices(self, rng: np.random.RandomState, indices: np.ndarray) -> np.ndarray:
+        return np.array([self._sample(rng, idx) for idx in indices])
+
+    def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
+        scaled_x = self._lb + x * (self._ub - self._lb)
+        scaled_x = scaled_x if self._q is None else np.round(scaled_x / self._q) * self._q
+        return scaled_x.astype(self._dtype)
 
     def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float) -> None:
         """
@@ -163,7 +228,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         """
         domain_range = self._ub - self._lb
         means = np.append(samples, 0.5 * (self._lb + self._ub))  # Add prior at the end
-        weights = uniform_weight(means.size)
+        self._weight = uniform_weight(means.size)
         std = means.std(ddof=1)
 
         IQR = np.subtract.reduce(np.percentile(means, [75, 25]))
@@ -177,7 +242,14 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._norm_consts, self._logpdf_consts = calculate_norm_consts(
             lb=self._lb, ub=self._ub, means=self._means, stds=self._stds
         )
-        self._weights = weights
+
+    @property
+    def domain_size(self) -> NumericType:
+        return self._ub - self._lb
+
+    @property
+    def size(self) -> int:
+        return self._size
 
 
 class CategoricalParzenEstimator(AbstractParzenEstimator):
@@ -191,11 +263,12 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
             raise ValueError("All the samples must be in [0, n_choices).")
 
         self._dtype = np.int32
+        self._size = samples.size + 1
         self._n_choices = n_choices
         # AitchisonAitkenKernel: p = top or (1 - top) / (c - 1)
         # UniformKernel: p = 1 / c
         self._top, self._bottom, self._uniform = top, (1 - top) / (n_choices - 1), 1.0 / n_choices
-        self._weight = uniform_weight(samples.size + 1)[0]
+        self._weight = uniform_weight(samples.size + 1)
         indices, counts = np.unique(samples, return_counts=True)
         self._probs = np.full(n_choices, self._uniform)  # uniform prior, so the initial value is 1 / c.
 
@@ -208,17 +281,40 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         likelihood_choices = np.array(
             [[self._top if i == j else self._bottom for j in range(n_choices)] for i in range(n_choices)]
         )
+
+        # shape = (n_basis, n_choices)
         bls = np.vstack([likelihood_choices[samples], np.full(n_choices, self._uniform)])
-        self._basis_loglikelihoods = np.log(bls)  # shape = (n_basis, n_choices)
+        self._basis_loglikelihoods = np.log(bls)
+        self._cum_basis_likelihoods = np.cumsum(bls, axis=-1)
 
     def __repr__(self) -> str:
         return f"CategoricalParzenEstimator(n_choices={self._n_choices}, top={self._top}, probs={self._probs})"
 
+    def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
+        scaled_x = x * self._n_choices
+        return scaled_x.astype(self._dtype)
+
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
         return self._basis_loglikelihoods[:, x]
 
+    def pdf(self, x: np.ndarray) -> np.ndarray:
+        return self._probs[x]
+
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
         return rng.choice(self._n_choices, p=self._probs, size=n_samples)
+
+    def sample_by_indices(self, rng: np.random.RandomState, indices: np.ndarray) -> np.ndarray:
+        n_samples = indices.size
+        # equiv to ==> [rng.choice(n_choices, p=basis_likelihoods[idx], size=1)[0] for idx in indices]
+        return (self._cum_basis_likelihoods[indices] > rng.random(n_samples)[:, np.newaxis]).argmax(axis=-1)
+
+    @property
+    def domain_size(self) -> NumericType:
+        return self._n_choices
+
+    @property
+    def size(self) -> int:
+        return self._size
 
 
 ParzenEstimatorType = Union[NumericalParzenEstimator, CategoricalParzenEstimator]

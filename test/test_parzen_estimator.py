@@ -113,7 +113,7 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         mus = np.array([0.4372727, 0.44549973])
         lb, ub = 0, 1
         pe = NumericalParzenEstimator(samples=mus, lb=lb, ub=ub)
-        assert np.allclose(pe._weights, [0.33333333, 0.33333333, 0.33333333])
+        assert np.allclose([pe._weight], [0.33333333])
         assert np.allclose(pe._means, [0.43727276, 0.44549973, 0.5])
         assert np.allclose(pe._stds, [0.019897270747110334, 0.019897270747110334, 1.0])
         ans = [
@@ -308,8 +308,8 @@ class TestBuildParzenEstimators(unittest.TestCase):
         s_vals = ["a", "b", "c"]
         try:
             build_categorical_parzen_estimator(config=C, vals=s_vals)
-        except Exception:
-            raise ValueError("test_build_numerical_parzen_estimator failed.")
+        except Exception as e:
+            raise ValueError(f"test_build_numerical_parzen_estimator failed with {e}.")
 
     def test_build_numerical_parzen_estimator(self) -> None:
         lb, ub, q = 1, 100, 0.5

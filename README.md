@@ -1,5 +1,5 @@
-[![Build Status](https://github.com/nabenabe0928/tpe/workflows/Functionality%20test/badge.svg?branch=main)](https://github.com/nabenabe0928/tpe)
-[![codecov](https://codecov.io/gh/nabenabe0928/tpe/branch/main/graph/badge.svg?token=UXC2K5VJNN)](https://codecov.io/gh/nabenabe0928/tpe)
+[![Build Status](https://github.com/nabenabe0928/parzen_estimator/workflows/Functionality%20test/badge.svg?branch=main)](https://github.com/nabenabe0928/parzen_estimator)
+[![codecov](https://codecov.io/gh/nabenabe0928/parzen_estimator/branch/main/graph/badge.svg?token=64WK4ZWGA2)](https://codecov.io/gh/nabenabe0928/parzen_estimator)
 
 # Introduction
 This package is mainly used for the implementation of tree-structured parzen estimator (TPE).

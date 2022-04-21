@@ -1,8 +1,8 @@
 import numpy as np
-from scipy.special import logsumexp
+from parzen_estimator.utils import logsumexp
 
 
-def compute_config_loglikelihoods(basis_loglikelihoods: np.ndarray, weights: np.ndarray) -> np.ndarray:
+def compute_config_loglikelihoods(basis_loglikelihoods: np.ndarray, weight: float) -> np.ndarray:
     """
     Calculate the loglikelihood of configurations based on parzen estimator.
 
@@ -17,6 +17,6 @@ def compute_config_loglikelihoods(basis_loglikelihoods: np.ndarray, weights: np.
     # Product of kernels with respect to dimension
     config_basis_loglikelihoods = basis_loglikelihoods.sum(axis=0)
     # Compute config loglikelihoods using logsumexp to avoid overflow
-    config_loglikelihoods = logsumexp(config_basis_loglikelihoods, b=weights[:, np.newaxis], axis=0)
+    config_loglikelihoods = logsumexp(config_basis_loglikelihoods, weight=weight, axis=0)
 
     return config_loglikelihoods
