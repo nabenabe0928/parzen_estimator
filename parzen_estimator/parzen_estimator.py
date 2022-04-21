@@ -6,6 +6,7 @@ import numpy as np
 from parzen_estimator.constants import (
     CategoricalHPType,
     EPS,
+    NULL_VALUE,
     NumericType,
     NumericalHPType,
     SQR2,
@@ -264,6 +265,7 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
 
         self._dtype = np.int32
         self._size = samples.size + 1
+        self._samples = np.append(samples, NULL_VALUE)
         self._n_choices = n_choices
         # AitchisonAitkenKernel: p = top or (1 - top) / (c - 1)
         # UniformKernel: p = 1 / c
@@ -283,7 +285,7 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         )
 
         # shape = (n_basis, n_choices)
-        bls = np.vstack([likelihood_choices[samples], np.full(n_choices, self._uniform)])
+        bls = np.maximum(1e-12, np.vstack([likelihood_choices[samples], np.full(n_choices, self._uniform)]))
         self._basis_loglikelihoods = np.log(bls)
         self._cum_basis_likelihoods = np.cumsum(bls, axis=-1)
 

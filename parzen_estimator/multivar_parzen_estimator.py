@@ -5,6 +5,7 @@ import numpy as np
 from parzen_estimator import CategoricalParzenEstimator, NumericalParzenEstimator
 from parzen_estimator.constants import uniform_weight
 from parzen_estimator.loglikelihoods import compute_config_loglikelihoods
+from parzen_estimator.utils import exp
 
 from scipy.stats.qmc import LatinHypercube as LHS
 from scipy.stats.qmc import Sobol
@@ -14,10 +15,10 @@ SAMPLING_CHOICES = {"sobol": Sobol, "lhs": LHS}
 ParzenEstimatorType = Union[CategoricalParzenEstimator, NumericalParzenEstimator]
 
 
-class MultiDimensionParzenEstimator:
+class MultiVariateParzenEstimator:
     def __init__(self, parzen_estimators: Dict[str, ParzenEstimatorType]):
         """
-        MultiDimensionalParzenEstimator exclusively used for task similarity calculation.
+        MultiVariateParzenEstimator.
 
         Attributes:
             parzen_estimators (Dict[str, ParzenEstimatorType]):
@@ -33,22 +34,14 @@ class MultiDimensionParzenEstimator:
         self._dim = len(parzen_estimators)
         self._size = list(parzen_estimators.values())[0].size
         self._weight = uniform_weight(self._size)
-        self._hypervolume = self._calculate_hypervolume()
+
+        if any(pe.size != self._size for pe in parzen_estimators.values()):
+            raise ValueError("All parzen estimators must be identical.")
 
     def __repr__(self) -> str:
         return "\n".join(
             [f"({idx + 1}): {hp_name}\n{pe}" for idx, (hp_name, pe) in enumerate(self._parzen_estimators.items())]
         )
-
-    def _calculate_hypervolume(self) -> float:
-        hypervolume = 1.0
-        for pe in self._parzen_estimators.values():
-            hypervolume *= pe.domain_size
-
-        if hypervolume > 1e300 or hypervolume < 1e-300:
-            raise ValueError(f"hypervolume ({hypervolume}) might cause over- or underflow.")
-
-        return hypervolume
 
     def dimension_wise_pdf(self, X: List[np.ndarray]) -> np.ndarray:
         """
@@ -106,7 +99,7 @@ class MultiDimensionParzenEstimator:
                 The density values for each data point.
                 The shape is (n_samples, ).
         """
-        return np.exp(self.log_pdf(X))
+        return exp(self.log_pdf(X))
 
     def sample(self, n_samples: int, rng: np.random.RandomState) -> List[np.ndarray]:
         samples = []
