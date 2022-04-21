@@ -1,0 +1,11 @@
+**/__pycache__
+.vscode/
+results/
+log/
+incumbents/
+**/.mypy_cache
+**/.pytest_cache
+
+build/
+dist/
+tpe.egg-info/
