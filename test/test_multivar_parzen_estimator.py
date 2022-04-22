@@ -101,6 +101,40 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         integral = pdf_val.sum()
         self.assertAlmostEqual(integral, 1.0)
 
+    def test_sample_by_independent(self) -> None:
+        mvpe = default_multivar_pe(top=1.0)
+        size = mvpe.size
+        assert isinstance(mvpe._parzen_estimators["n1"], NumericalParzenEstimator)
+        assert isinstance(mvpe._parzen_estimators["n2"], NumericalParzenEstimator)
+        assert isinstance(mvpe._parzen_estimators["c1"], CategoricalParzenEstimator)
+        mvpe._parzen_estimators["n1"]._stds[:] = 1e-12
+        mvpe._parzen_estimators["n2"]._stds[:] = 1e-12
+        configs = [
+            [
+                getattr(pe, "_means")[i] if hasattr(pe, "_means") else getattr(pe, "_samples")[i]
+                for pe in mvpe._parzen_estimators.values()
+            ]
+            for i in range(size)
+        ]
+
+        n_samples = 30
+        at_least_one_is_independent = False
+        samples = mvpe.sample(n_samples=n_samples, rng=np.random.RandomState(), dim_independent=True)
+        for i in range(n_samples):
+            sampled_config = [samples[d][i] for d in range(3)]
+            dependent = False
+            for config in configs:
+                if np.allclose(sampled_config, config):
+                    dependent = True
+                    break
+                elif config[-1] == NULL_VALUE and np.allclose(sampled_config[:2], config[:2]):
+                    dependent = True
+                    break
+            print(not dependent)
+            at_least_one_is_independent |= not dependent
+
+        assert at_least_one_is_independent
+
     def test_sample(self) -> None:
         mvpe = default_multivar_pe(top=1.0)
         size = mvpe.size

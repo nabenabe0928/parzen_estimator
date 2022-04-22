@@ -101,12 +101,13 @@ class MultiVariateParzenEstimator:
         """
         return exp(self.log_pdf(X))
 
-    def sample(self, n_samples: int, rng: np.random.RandomState) -> List[np.ndarray]:
+    def sample(self, n_samples: int, rng: np.random.RandomState, dim_independent: bool = False) -> List[np.ndarray]:
         samples = []
-        indices = rng.randint(self._size, size=n_samples)
-
-        for d, pe in enumerate(self._parzen_estimators.values()):
-            samples.append(pe.sample_by_indices(rng, indices))
+        if dim_independent:
+            samples = [pe.sample(rng, n_samples) for d, pe in enumerate(self._parzen_estimators.values())]
+        else:
+            indices = rng.randint(self._size, size=n_samples)
+            samples = [pe.sample_by_indices(rng, indices) for d, pe in enumerate(self._parzen_estimators.values())]
 
         return samples
 
