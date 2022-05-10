@@ -34,7 +34,7 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         pes: Dict[str, Union[NumericalParzenEstimator, CategoricalParzenEstimator]] = {
             "n1": NumericalParzenEstimator(samples, lb, ub),
             "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1),
-            "c1": CategoricalParzenEstimator(choices, n_choices),
+            "c1": CategoricalParzenEstimator(choices, n_choices, top=0.8),
         }
         with pytest.raises(ValueError):
             MultiVariateParzenEstimator(pes)

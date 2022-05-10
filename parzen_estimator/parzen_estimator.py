@@ -138,7 +138,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         elif dtype in dtype_choices:
             self._dtype = dtype  # type: ignore
         else:
-            raise ValueError(f"dtype for NumericalParzenEstimator must be {dtype_choices}, but got {dtype}")
+            raise ValueError(f"dtype for {self.__class__.__name__} must be {dtype_choices}, but got {dtype}")
         if np.any(samples < lb) or np.any(samples > ub):
             raise ValueError(f"All the samples must be in [{lb}, {ub}].")
         if q is not None:
@@ -150,7 +150,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor)
 
     def __repr__(self) -> str:
-        ret = f"NumericalParzenEstimator(\n\tlb={self._lb}, ub={self._ub}, q={self._q},\n"
+        ret = f"{self.__class__.__name__}(\n\tlb={self._lb}, ub={self._ub}, q={self._q},\n"
         for i, (m, s) in enumerate(zip(self._means, self._stds)):
             ret += f"\t({i + 1}) weight: {self._weight}, basis: GaussKernel(mean={m}, std={s}),\n"
         return ret + ")"
@@ -254,11 +254,11 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
 
 class CategoricalParzenEstimator(AbstractParzenEstimator):
-    def __init__(self, samples: np.ndarray, n_choices: int, top: float = 0.8):
+    def __init__(self, samples: np.ndarray, n_choices: int, top: float):
 
         if samples.dtype not in [np.int32, np.int64]:
             raise ValueError(
-                "samples for CategoricalParzenEstimator must be np.ndarray[np.int32/64], " f"but got {samples.dtype}."
+                f"samples for {self.__class__.__name__} must be np.ndarray[np.int32/64], " f"but got {samples.dtype}."
             )
         if np.any(samples < 0) or np.any(samples >= n_choices):
             raise ValueError("All the samples must be in [0, n_choices).")
@@ -290,7 +290,7 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         self._cum_basis_likelihoods = np.cumsum(bls, axis=-1)
 
     def __repr__(self) -> str:
-        return f"CategoricalParzenEstimator(n_choices={self._n_choices}, top={self._top}, probs={self._probs})"
+        return f"{self.__class__.__name__}(n_choices={self._n_choices}, top={self._top}, probs={self._probs})"
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
         scaled_x = x * (self._n_choices - 1)
@@ -370,13 +370,16 @@ def build_numerical_parzen_estimator(
     return pe
 
 
-def build_categorical_parzen_estimator(config: CategoricalHPType, vals: np.ndarray) -> CategoricalParzenEstimator:
+def build_categorical_parzen_estimator(
+    config: CategoricalHPType, vals: np.ndarray, top: float = 1.0
+) -> CategoricalParzenEstimator:
     """
     Build a categorical parzen estimator
 
     Args:
         config (CategoricalHPType): Hyperparameter information from the ConfigSpace
         vals (np.ndarray): The observed hyperparameter values (i.e. symbols, but not indices)
+        top (float): The hyperparameter to define the probability of the category.
 
     Returns:
         pe (CategoricalParzenEstimator): Parzen estimators given a set of observations
@@ -392,6 +395,6 @@ def build_categorical_parzen_estimator(config: CategoricalHPType, vals: np.ndarr
             f"the list of symbols {choices}, but got the list of indices."
         )
 
-    pe = CategoricalParzenEstimator(samples=choice_indices, n_choices=n_choices)
+    pe = CategoricalParzenEstimator(samples=choice_indices, n_choices=n_choices, top=top)
 
     return pe
