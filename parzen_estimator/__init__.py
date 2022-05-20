@@ -7,7 +7,7 @@ from parzen_estimator.parzen_estimator import (
 from parzen_estimator.multivar_parzen_estimator import MultiVariateParzenEstimator, ParzenEstimatorType  # noqa: I100
 
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 __copyright__ = "Copyright (C) 2022 Shuhei Watanabe"
 __licence__ = "Apache-2.0 License"
 __author__ = "Shuhei Watanabe"

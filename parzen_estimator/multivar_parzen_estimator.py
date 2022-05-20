@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Union
+from typing import Dict, List, Union
 
 import numpy as np
 
@@ -115,7 +115,7 @@ class MultiVariateParzenEstimator:
         self,
         n_samples: int,
         rng: np.random.RandomState,
-        sampling_method: Literal[tuple(SAMPLING_CHOICES.keys())] = "sobol",  # type: ignore
+        sampling_method: str = "sobol",  # Literal["sobol", "lhs"]
     ) -> List[np.ndarray]:
         """
         Sample points using latin hypercube sampling.
