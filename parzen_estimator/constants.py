@@ -17,6 +17,11 @@ NumericalHPType = Union[
     CSH.OrdinalHyperparameter,
 ]
 HPType = Union[CategoricalHPType, NumericalHPType]
+config2type = {
+    "UniformFloatHyperparameter": float,
+    "UniformIntegerHyperparameter": int,
+    "OrdinalHyperparameter": float,
+}
 
 
 def uniform_weight(size: int) -> float:

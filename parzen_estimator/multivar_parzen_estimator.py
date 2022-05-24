@@ -1,9 +1,16 @@
 from typing import Dict, List, Union
 
+import ConfigSpace as CS
+
 import numpy as np
 
-from parzen_estimator import CategoricalParzenEstimator, NumericalParzenEstimator
-from parzen_estimator.constants import uniform_weight
+from parzen_estimator import (
+    CategoricalParzenEstimator,
+    NumericalParzenEstimator,
+    build_categorical_parzen_estimator,
+    build_numerical_parzen_estimator,
+)
+from parzen_estimator.constants import config2type, uniform_weight
 from parzen_estimator.loglikelihoods import compute_config_loglikelihoods
 from parzen_estimator.utils import exp
 
@@ -150,3 +157,30 @@ class MultiVariateParzenEstimator:
     @property
     def dim(self) -> int:
         return self._dim
+
+
+def get_multivar_pdf(
+    observations: Dict[str, np.ndarray], config_space: CS.ConfigurationSpace, default_min_bandwidth_factor: float
+) -> MultiVariateParzenEstimator:
+
+    hp_names = config_space.get_hyperparameter_names()
+    parzen_estimators: Dict[str, ParzenEstimatorType] = {}
+
+    for hp_name in hp_names:
+        config = config_space.get_hyperparameter(hp_name)
+        config_type = config.__class__.__name__
+        is_ordinal = config_type.startswith("Ordinal")
+        is_categorical = config_type.startswith("Categorical")
+        kwargs = dict(vals=observations[hp_name], config=config)
+
+        if is_categorical:
+            parzen_estimators[hp_name] = build_categorical_parzen_estimator(**kwargs)
+        else:
+            kwargs.update(
+                dtype=config2type[config_type],
+                is_ordinal=is_ordinal,
+                default_min_bandwidth_factor=default_min_bandwidth_factor,
+            )
+            parzen_estimators[hp_name] = build_numerical_parzen_estimator(**kwargs)
+
+    return MultiVariateParzenEstimator(parzen_estimators)

@@ -2,11 +2,13 @@ import numpy as np
 import pytest
 import unittest
 
+import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
 
 from parzen_estimator.parzen_estimator import (
     CategoricalParzenEstimator,
     NumericalParzenEstimator,
+    _get_min_bandwidth_factor,
     build_categorical_parzen_estimator,
     build_numerical_parzen_estimator,
 )
@@ -18,6 +20,41 @@ config2type = {
     "UniformIntegerHyperparameter": int,
     "OrdinalHyperparameter": float,
 }
+
+
+def test_get_min_bandwidth() -> None:
+    config_space = CS.ConfigurationSpace()
+    config_space.add_hyperparameters(
+        [
+            CSH.UniformFloatHyperparameter("x0", 1, 5, log=True, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformFloatHyperparameter("x1", 1, 5, log=True),
+            CSH.UniformFloatHyperparameter("x2", 1, 5, log=True, q=0.5, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformFloatHyperparameter("x3", 1, 5, log=True, q=0.5),
+            CSH.UniformFloatHyperparameter("x4", 1, 5, q=0.5, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformFloatHyperparameter("x5", 1, 5, q=0.5),
+            CSH.UniformFloatHyperparameter("x6", 1, 5, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformFloatHyperparameter("x7", 1, 5),
+            CSH.UniformIntegerHyperparameter("x8", 1, 5, log=True, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformIntegerHyperparameter("x9", 1, 5, log=True),
+            CSH.UniformIntegerHyperparameter("x10", 1, 5, log=True, q=2, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformIntegerHyperparameter("x11", 1, 5, log=True, q=2),
+            CSH.UniformIntegerHyperparameter("x12", 1, 5, q=2, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformIntegerHyperparameter("x13", 1, 5, q=2),
+            CSH.UniformIntegerHyperparameter("x14", 1, 5, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformIntegerHyperparameter("x15", 1, 5),
+            CSH.OrdinalHyperparameter("x16", sequence=[1, 2, 3, 4, 5], meta={"lower": 1, "upper": 5}),
+            CSH.OrdinalHyperparameter(
+                "x17", sequence=[1, 2, 3, 4, 5], meta={"lower": 1, "upper": 5, "min_bandwidth_factor": 0.1}
+            ),
+        ]
+    )
+
+    for d, ans in enumerate(
+        [0.1, 0.01, 0.1, 0.01, 0.1, 1 / 9, 0.1, 0.01, 0.1, 0.01, 0.1, 0.01, 0.1, 1 / 3, 0.1, 1 / 5, 1 / 5, 0.1]
+    ):
+        config = config_space.get_hyperparameter(f"x{d}")
+        is_ordinal = config.__class__.__name__.startswith("Ordinal")
+        assert _get_min_bandwidth_factor(config, is_ordinal, default_min_bandwidth_factor=1e-2) == ans
 
 
 class TestNumericalParzenEstimator(unittest.TestCase):
@@ -66,7 +103,7 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         assert ss.shape == (10,)
 
         samples = np.array([-1, 0, 1] * 10)
-        pe = NumericalParzenEstimator(samples=samples, lb=-1.25, ub=1.25, q=0.5)
+        pe = NumericalParzenEstimator(samples=samples, lb=-1.25, ub=1.25, q=0.5, hard_lb=-1.0)
         ss = pe.sample(rng, 100)
         choices = np.array([-1.0, -0.5, 0.0, 0.5, 1.0])
         assert np.allclose(np.unique(ss), choices)

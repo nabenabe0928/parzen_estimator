@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from typing import Optional, Tuple, Type, Union
 
+import ConfigSpace as CS
+
 import numpy as np
 
 from parzen_estimator.constants import (
@@ -11,9 +13,30 @@ from parzen_estimator.constants import (
     NumericalHPType,
     SQR2,
     SQR2PI,
+    config2type,
     uniform_weight,
 )
 from parzen_estimator.utils import erf, exp, log
+
+
+def _get_min_bandwidth_factor(
+    config: CS.hyperparameters, is_ordinal: bool, default_min_bandwidth_factor: float
+) -> float:
+
+    if config.meta and "min_bandwidth_factor" in config.meta:
+        return config.meta["min_bandwidth_factor"]
+    if is_ordinal:
+        return 1.0 / len(config.sequence)
+
+    dtype = config2type[config.__class__.__name__]
+    lb, ub, log, q = config.lower, config.upper, config.log, config.q
+
+    if not log and (q is not None or dtype is int):
+        q = q if q is not None else 1
+        n_grids = int((ub - lb) / q) + 1
+        return 1.0 / n_grids
+
+    return default_min_bandwidth_factor
 
 
 def calculate_norm_consts(
@@ -123,11 +146,13 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         lb: NumericType,
         ub: NumericType,
         q: Optional[NumericType] = None,
+        hard_lb: Optional[NumericType] = None,
         dtype: Type[Union[np.number, int, float]] = np.float64,
         min_bandwidth_factor: float = 1e-2,
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
+        self._hard_lb = hard_lb if hard_lb else lb
         self._size = samples.size + 1
         dtype_choices = (np.int32, np.int64, np.float32, np.float64)
         self._dtype: Type[np.number]
@@ -143,9 +168,12 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
             raise ValueError(f"All the samples must be in [{lb}, {ub}].")
         if q is not None:
             cands = np.unique(samples)
-            converted_cands = np.round(cands / q) * q
+            converted_cands = np.round((cands - self._hard_lb) / q) * q + self._hard_lb
             if not np.allclose(cands, converted_cands):
-                raise ValueError("All the samples for q != None must be discritized appropriately.")
+                raise ValueError(
+                    "All the samples for q != None must be discritized appropriately."
+                    f" Expected each value to be in {converted_cands}, but got {cands}"
+                )
 
         self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor)
 
@@ -194,7 +222,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         while True:
             val = rng.normal(loc=self._means[idx], scale=self._stds[idx])
             if self._lb <= val <= self._ub:
-                return val if self._q is None else np.round(val / self._q) * self._q
+                return val if self._q is None else np.round((val - self._hard_lb) / self._q) * self._q + self._hard_lb
 
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
         weights = np.full(self.size, self._weight)
@@ -206,7 +234,9 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
         scaled_x = self._lb + x * (self._ub - self._lb)
-        scaled_x = scaled_x if self._q is None else np.round(scaled_x / self._q) * self._q
+        scaled_x = (
+            scaled_x if self._q is None else np.round((scaled_x - self._hard_lb) / self._q) * self._q + self._hard_lb
+        )
         return scaled_x.astype(self._dtype)
 
     def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float) -> None:
@@ -294,7 +324,6 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
         scaled_x = x * (self._n_choices - 1)
-        print(scaled_x)
         return scaled_x.astype(self._dtype)
 
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
@@ -328,7 +357,7 @@ def build_numerical_parzen_estimator(
     dtype: Type[Union[float, int]],
     vals: np.ndarray,
     is_ordinal: bool,
-    min_bandwidth_factor: float = 1e-2,
+    default_min_bandwidth_factor: float = 1e-2,
 ) -> NumericalParzenEstimator:
     """
     Build a numerical parzen estimator
@@ -342,6 +371,7 @@ def build_numerical_parzen_estimator(
     Returns:
         pe (NumericalParzenEstimator): Parzen estimator given a set of observations
     """
+    min_bandwidth_factor = _get_min_bandwidth_factor(config, is_ordinal, default_min_bandwidth_factor)
 
     if is_ordinal:
         info = config.meta
@@ -349,12 +379,14 @@ def build_numerical_parzen_estimator(
     else:
         q, log, lb, ub = config.q, config.log, config.lower, config.upper
 
+    hard_lb: Optional[NumericType] = None
     if dtype is int or q is not None:
         if log:
             q = None
         elif q is None:
             q = 1
         if q is not None:
+            hard_lb = lb
             lb -= 0.5 * q
             ub += 0.5 * q
 
@@ -364,7 +396,7 @@ def build_numerical_parzen_estimator(
         vals = np.log(vals)
 
     pe = NumericalParzenEstimator(
-        samples=vals, lb=lb, ub=ub, q=q, dtype=dtype, min_bandwidth_factor=min_bandwidth_factor
+        samples=vals, lb=lb, ub=ub, q=q, hard_lb=hard_lb, dtype=dtype, min_bandwidth_factor=min_bandwidth_factor
     )
 
     return pe

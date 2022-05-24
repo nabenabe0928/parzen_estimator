@@ -2,10 +2,50 @@ import pytest
 import unittest
 from typing import Dict, Union
 
+import ConfigSpace as CS
+import ConfigSpace.hyperparameters as CSH
+
 import numpy as np
 
-from parzen_estimator import CategoricalParzenEstimator, MultiVariateParzenEstimator, NumericalParzenEstimator
+from parzen_estimator import (
+    CategoricalParzenEstimator,
+    MultiVariateParzenEstimator,
+    NumericalParzenEstimator,
+    get_multivar_pdf,
+)
 from parzen_estimator.constants import NULL_VALUE
+
+
+def test_get_multivar_pdf() -> None:
+    config_space = CS.ConfigurationSpace()
+    config_space.add_hyperparameters(
+        [
+            CSH.UniformFloatHyperparameter("x0", 1, 5, log=True, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformFloatHyperparameter("x1", 1, 5, log=True),
+            CSH.UniformFloatHyperparameter("x2", 1, 5, q=0.5, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformFloatHyperparameter("x3", 1, 5, q=0.5),
+            CSH.UniformFloatHyperparameter("x4", 1, 5, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformFloatHyperparameter("x5", 1, 5),
+            CSH.UniformIntegerHyperparameter("x6", 1, 5, log=True, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformIntegerHyperparameter("x7", 1, 5, log=True),
+            CSH.UniformIntegerHyperparameter("x8", 1, 5, q=2, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformIntegerHyperparameter("x9", 1, 5, q=2),
+            CSH.UniformIntegerHyperparameter("x10", 1, 5, meta={"min_bandwidth_factor": 0.1}),
+            CSH.UniformIntegerHyperparameter("x11", 1, 5),
+            CSH.OrdinalHyperparameter("x12", sequence=[1, 2, 3, 4, 5], meta={"lower": 1, "upper": 5}),
+            CSH.OrdinalHyperparameter(
+                "x13", sequence=[1, 2, 3, 4, 5], meta={"lower": 1, "upper": 5, "min_bandwidth_factor": 0.1}
+            ),
+            CSH.CategoricalHyperparameter("x14", choices=["a", "b", "c"]),
+        ]
+    )
+    observations = {
+        f"x{d}": np.asarray([config_space.sample_configuration().get_dictionary()[f"x{d}"] for _ in range(20)])
+        for d in range(15)
+    }
+    pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2)
+    assert pdf.dim == 15
+    assert pdf.size == 21
 
 
 def default_multivar_pe(top: float = 0.8) -> MultiVariateParzenEstimator:
@@ -130,7 +170,7 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
                 elif config[-1] == NULL_VALUE and np.allclose(sampled_config[:2], config[:2]):
                     dependent = True
                     break
-            print(not dependent)
+
             at_least_one_is_independent |= not dependent
 
         assert at_least_one_is_independent
