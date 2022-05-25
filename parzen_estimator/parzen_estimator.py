@@ -145,15 +145,17 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         samples: np.ndarray,
         lb: NumericType,
         ub: NumericType,
+        *,
         q: Optional[NumericType] = None,
         hard_lb: Optional[NumericType] = None,
         dtype: Type[Union[np.number, int, float]] = np.float64,
         min_bandwidth_factor: float = 1e-2,
+        prior: bool = True,
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
         self._hard_lb = hard_lb if hard_lb else lb
-        self._size = samples.size + 1
+        self._size = samples.size + prior
         dtype_choices = (np.int32, np.int64, np.float32, np.float64)
         self._dtype: Type[np.number]
         if dtype is int:
@@ -175,7 +177,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                     f" Expected each value to be in {converted_cands}, but got {cands}"
                 )
 
-        self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor)
+        self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior)
 
     def __repr__(self) -> str:
         ret = f"{self.__class__.__name__}(\n\tlb={self._lb}, ub={self._ub}, q={self._q},\n"
@@ -239,7 +241,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         )
         return scaled_x.astype(self._dtype)
 
-    def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float) -> None:
+    def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool) -> None:
         """
         Calculate parameters of KDE based on Scott's rule
 
@@ -258,7 +260,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                 * Wolfgang, H (2005) Nonparametric and Semiparametric Models
         """
         domain_range = self._ub - self._lb
-        means = np.append(samples, 0.5 * (self._lb + self._ub))  # Add prior at the end
+        means = np.append(samples, 0.5 * (self._lb + self._ub)) if prior else samples.copy()
         self._weight = uniform_weight(means.size)
         std = means.std(ddof=1)
 
@@ -267,7 +269,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         # 99% of samples will be confined in mean \pm 0.025 * domain_range (2.5 sigma)
         min_bandwidth = min_bandwidth_factor * domain_range
         clipped_bandwidth = np.ones_like(means) * np.clip(bandwidth, min_bandwidth, 0.5 * domain_range)
-        clipped_bandwidth[-1] = domain_range  # The bandwidth for the prior
+        if prior:
+            clipped_bandwidth[-1] = domain_range  # The bandwidth for the prior
 
         self._means, self._stds = means, clipped_bandwidth
         self._norm_consts, self._logpdf_consts = calculate_norm_consts(
@@ -284,7 +287,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
 
 class CategoricalParzenEstimator(AbstractParzenEstimator):
-    def __init__(self, samples: np.ndarray, n_choices: int, top: float):
+    def __init__(self, samples: np.ndarray, n_choices: int, top: float, *, prior: bool = True):
 
         if samples.dtype not in [np.int32, np.int64]:
             raise ValueError(
@@ -294,15 +297,16 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
             raise ValueError("All the samples must be in [0, n_choices).")
 
         self._dtype = np.int32
-        self._size = samples.size + 1
+        self._size = samples.size + prior
         self._samples = np.append(samples, NULL_VALUE)
         self._n_choices = n_choices
         # AitchisonAitkenKernel: p = top or (1 - top) / (c - 1)
         # UniformKernel: p = 1 / c
         self._top, self._bottom, self._uniform = top, (1 - top) / (n_choices - 1), 1.0 / n_choices
-        self._weight = uniform_weight(samples.size + 1)
+        self._weight = uniform_weight(self.size)
         indices, counts = np.unique(samples, return_counts=True)
-        self._probs = np.full(n_choices, self._uniform)  # uniform prior, so the initial value is 1 / c.
+        # if we use prior, apply uniform prior so that the initial value is 1 / c.
+        self._probs = np.full(n_choices, self._uniform * prior)
 
         slicer = np.arange(n_choices)
         for idx, count in zip(indices, counts):
@@ -357,7 +361,9 @@ def build_numerical_parzen_estimator(
     dtype: Type[Union[float, int]],
     vals: np.ndarray,
     is_ordinal: bool,
+    *,
     default_min_bandwidth_factor: float = 1e-2,
+    prior: bool = True,
 ) -> NumericalParzenEstimator:
     """
     Build a numerical parzen estimator
@@ -396,14 +402,21 @@ def build_numerical_parzen_estimator(
         vals = np.log(vals)
 
     pe = NumericalParzenEstimator(
-        samples=vals, lb=lb, ub=ub, q=q, hard_lb=hard_lb, dtype=dtype, min_bandwidth_factor=min_bandwidth_factor
+        samples=vals,
+        lb=lb,
+        ub=ub,
+        q=q,
+        hard_lb=hard_lb,
+        dtype=dtype,
+        min_bandwidth_factor=min_bandwidth_factor,
+        prior=prior,
     )
 
     return pe
 
 
 def build_categorical_parzen_estimator(
-    config: CategoricalHPType, vals: np.ndarray, top: float = 1.0
+    config: CategoricalHPType, vals: np.ndarray, top: float = 1.0, *, prior: bool = True
 ) -> CategoricalParzenEstimator:
     """
     Build a categorical parzen estimator
@@ -427,6 +440,6 @@ def build_categorical_parzen_estimator(
             f"the list of symbols {choices}, but got the list of indices."
         )
 
-    pe = CategoricalParzenEstimator(samples=choice_indices, n_choices=n_choices, top=top)
+    pe = CategoricalParzenEstimator(samples=choice_indices, n_choices=n_choices, top=top, prior=prior)
 
     return pe

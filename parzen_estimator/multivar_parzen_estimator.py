@@ -160,7 +160,11 @@ class MultiVariateParzenEstimator:
 
 
 def get_multivar_pdf(
-    observations: Dict[str, np.ndarray], config_space: CS.ConfigurationSpace, default_min_bandwidth_factor: float
+    observations: Dict[str, np.ndarray],
+    config_space: CS.ConfigurationSpace,
+    *,
+    default_min_bandwidth_factor: float = 1e-2,
+    prior: bool = True,
 ) -> MultiVariateParzenEstimator:
 
     hp_names = config_space.get_hyperparameter_names()
@@ -171,7 +175,7 @@ def get_multivar_pdf(
         config_type = config.__class__.__name__
         is_ordinal = config_type.startswith("Ordinal")
         is_categorical = config_type.startswith("Categorical")
-        kwargs = dict(vals=observations[hp_name], config=config)
+        kwargs = dict(vals=observations[hp_name], config=config, prior=prior)
 
         if is_categorical:
             parzen_estimators[hp_name] = build_categorical_parzen_estimator(**kwargs)

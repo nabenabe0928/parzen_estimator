@@ -17,6 +17,7 @@ from parzen_estimator.constants import NULL_VALUE
 
 
 def test_get_multivar_pdf() -> None:
+    dim, size = 15, 20
     config_space = CS.ConfigurationSpace()
     config_space.add_hyperparameters(
         [
@@ -40,12 +41,16 @@ def test_get_multivar_pdf() -> None:
         ]
     )
     observations = {
-        f"x{d}": np.asarray([config_space.sample_configuration().get_dictionary()[f"x{d}"] for _ in range(20)])
-        for d in range(15)
+        f"x{d}": np.asarray([config_space.sample_configuration().get_dictionary()[f"x{d}"] for _ in range(size)])
+        for d in range(dim)
     }
-    pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2)
-    assert pdf.dim == 15
-    assert pdf.size == 21
+    pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=True)
+    assert pdf.dim == dim
+    assert pdf.size == size + 1
+
+    pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=False)
+    assert pdf.dim == dim
+    assert pdf.size == size
 
 
 def default_multivar_pe(top: float = 0.8) -> MultiVariateParzenEstimator:

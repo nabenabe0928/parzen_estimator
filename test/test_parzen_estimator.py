@@ -67,6 +67,18 @@ class TestNumericalParzenEstimator(unittest.TestCase):
             with pytest.raises(ValueError):
                 NumericalParzenEstimator(**kwargs)
 
+    def test_init_without_prior(self) -> None:
+        lb, ub = -50, 50
+        samples = np.array([-2, -1, 0, 1, 2])
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=False)
+        assert np.allclose(pe._means, samples)
+        assert pe._stds.size == samples.size
+        assert np.isclose(pe._weight, 1.0 / samples.size)
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=True)
+        assert np.allclose(pe._means, list(samples) + [0])
+        assert pe._stds.size == samples.size + 1
+        assert np.isclose(pe._weight, 1.0 / (samples.size + 1))
+
     def test_cdf_discrete(self) -> None:
         lb, ub = -50, 50
         samples = np.array([-2, -1, 0, 1, 2])
@@ -290,6 +302,13 @@ class TestCategoricalParzenEstimator(unittest.TestCase):
         for samples in samples_set:
             with pytest.raises(ValueError):
                 CategoricalParzenEstimator(samples=samples, n_choices=4, top=0.7)
+
+    def test_init_without_prior(self) -> None:
+        samples = np.array([0, 1])
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=3, top=0.9, prior=False)
+        assert np.allclose(pe._probs, np.array([0.475, 0.475, 0.05]))
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=3, top=0.9, prior=True)
+        assert np.allclose(pe._probs, np.array([0.42777778, 0.42777778, 0.14444444]))
 
     def test_sample(self) -> None:
         rng = np.random.RandomState()
