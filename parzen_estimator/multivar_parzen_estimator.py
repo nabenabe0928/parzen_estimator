@@ -158,6 +158,10 @@ class MultiVariateParzenEstimator:
     def dim(self) -> int:
         return self._dim
 
+    @property
+    def hp_names(self) -> List[str]:
+        return list(self._parzen_estimators.keys())
+
 
 def get_multivar_pdf(
     observations: Dict[str, np.ndarray],

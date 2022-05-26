@@ -47,10 +47,12 @@ def test_get_multivar_pdf() -> None:
     pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=True)
     assert pdf.dim == dim
     assert pdf.size == size + 1
+    assert pdf.hp_names == np.sort(config_space.get_hyperparameter_names()).tolist()
 
     pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=False)
     assert pdf.dim == dim
     assert pdf.size == size
+    assert pdf.hp_names == np.sort(config_space.get_hyperparameter_names()).tolist()
 
 
 def default_multivar_pe(top: float = 0.8) -> MultiVariateParzenEstimator:
