@@ -316,7 +316,7 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         self._top, self._bottom, self._uniform = top, (1 - top) / (n_choices - 1), 1.0 / n_choices
         self._weight = uniform_weight(self.size)
         self._probs = self._get_probs(samples, prior)
-        bls = self._get_basislikelihoods(samples)
+        bls = self._get_basislikelihoods(samples, prior)
         self._basis_loglikelihoods = np.log(bls)
         self._cum_basis_likelihoods = np.cumsum(bls, axis=-1)
 
@@ -331,14 +331,19 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         if np.any(samples < 0) or np.any(samples >= n_choices):
             raise ValueError("All the samples must be in [0, n_choices).")
 
-    def _get_basislikelihoods(self, samples: np.ndarray) -> np.ndarray:
+    def _get_basislikelihoods(self, samples: np.ndarray, prior: bool) -> np.ndarray:
         n_choices = self.n_choices
         likelihood_choices = np.array(
             [[self._top if i == j else self._bottom for j in range(n_choices)] for i in range(n_choices)]
         )
 
         # shape = (n_basis, n_choices)
-        return np.maximum(1e-12, np.vstack([likelihood_choices[samples], np.full(n_choices, self._uniform)]))
+        if prior:
+            blls = np.vstack([likelihood_choices[samples], np.full(n_choices, self._uniform)])
+        else:
+            blls = likelihood_choices[samples]
+
+        return np.maximum(1e-12, blls)
 
     def _get_probs(self, samples: np.ndarray, prior: bool) -> np.ndarray:
         indices, counts = np.unique(samples, return_counts=True)
