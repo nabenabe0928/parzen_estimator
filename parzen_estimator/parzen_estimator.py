@@ -156,8 +156,20 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._lb, self._ub, self._q = lb, ub, q
         self._hard_lb = hard_lb if hard_lb else lb
         self._size = samples.size + prior
-        dtype_choices = (np.int32, np.int64, np.float32, np.float64)
         self._dtype: Type[np.number]
+        self._validate(dtype, samples)
+
+        self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior)
+
+    def __repr__(self) -> str:
+        ret = f"{self.__class__.__name__}(\n\tlb={self.lb}, ub={self.ub}, q={self.q},\n"
+        for i, (m, s) in enumerate(zip(self._means, self._stds)):
+            ret += f"\t({i + 1}) weight: {self._weight}, basis: GaussKernel(mean={m}, std={s}),\n"
+        return ret + ")"
+
+    def _validate(self, dtype: Type[Union[np.number, int, float]], samples: np.ndarray) -> None:
+        dtype_choices = (np.int32, np.int64, np.float32, np.float64)
+        lb, ub, q = self.lb, self.ub, self.q
         if dtype is int:
             self._dtype = np.int32
         elif dtype is float:
@@ -177,31 +189,23 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                     f" Expected each value to be in {converted_cands}, but got {cands}"
                 )
 
-        self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior)
-
-    def __repr__(self) -> str:
-        ret = f"{self.__class__.__name__}(\n\tlb={self._lb}, ub={self._ub}, q={self._q},\n"
-        for i, (m, s) in enumerate(zip(self._means, self._stds)):
-            ret += f"\t({i + 1}) weight: {self._weight}, basis: GaussKernel(mean={m}, std={s}),\n"
-        return ret + ")"
-
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
-        if self._q is None:
+        if self.q is None:
             mahalanobis = ((x - self._means[:, np.newaxis]) / self._stds[:, np.newaxis]) ** 2
             return self._logpdf_consts[:, np.newaxis] - 0.5 * mahalanobis
         else:
-            integral_u = self.cdf(np.minimum(x + 0.5 * self._q, self._ub))
-            integral_l = self.cdf(np.maximum(x - 0.5 * self._q, self._lb))
+            integral_u = self.cdf(np.minimum(x + 0.5 * self.q, self.ub))
+            integral_l = self.cdf(np.maximum(x - 0.5 * self.q, self.lb))
             return log(integral_u - integral_l + EPS)
 
     def pdf(self, x: np.ndarray) -> np.ndarray:
-        if self._q is None:
+        if self.q is None:
             norm_consts = self._norm_consts / (SQR2PI * self._stds)  # noqa: F841
             mahalanobis = ((x[:, np.newaxis] - self._means) / self._stds) ** 2  # noqa: F841
             return self._weight * np.sum(norm_consts * exp(-0.5 * mahalanobis), axis=-1)
         else:
-            integral_u = self.cdf(np.minimum(x + 0.5 * self._q, self._ub))
-            integral_l = self.cdf(np.maximum(x - 0.5 * self._q, self._lb))
+            integral_u = self.cdf(np.minimum(x + 0.5 * self.q, self.ub))
+            integral_l = self.cdf(np.maximum(x - 0.5 * self.q, self.lb))
             return self._weight * np.sum(integral_u - integral_l, axis=0)
 
     def cdf(self, x: np.ndarray) -> np.ndarray:
@@ -223,8 +227,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
     def _sample(self, rng: np.random.RandomState, idx: int) -> NumericType:
         while True:
             val = rng.normal(loc=self._means[idx], scale=self._stds[idx])
-            if self._lb <= val <= self._ub:
-                return val if self._q is None else np.round((val - self._hard_lb) / self._q) * self._q + self._hard_lb
+            if self.lb <= val <= self.ub:
+                return val if self.q is None else np.round((val - self._hard_lb) / self.q) * self.q + self._hard_lb
 
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
         weights = np.full(self.size, self._weight)
@@ -235,9 +239,9 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         return np.array([self._sample(rng, idx) for idx in indices])
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
-        scaled_x = self._lb + x * (self._ub - self._lb)
+        scaled_x = self.lb + x * (self.ub - self.lb)
         scaled_x = (
-            scaled_x if self._q is None else np.round((scaled_x - self._hard_lb) / self._q) * self._q + self._hard_lb
+            scaled_x if self.q is None else np.round((scaled_x - self._hard_lb) / self.q) * self.q + self._hard_lb
         )
         return scaled_x.astype(self._dtype)
 
@@ -259,8 +263,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                   density estimation: a review of fully automatic selector
                 * Wolfgang, H (2005) Nonparametric and Semiparametric Models
         """
-        domain_range = self._ub - self._lb
-        means = np.append(samples, 0.5 * (self._lb + self._ub)) if prior else samples.copy()
+        domain_range = self.ub - self.lb
+        means = np.append(samples, 0.5 * (self.lb + self.ub)) if prior else samples.copy()
         self._weight = uniform_weight(means.size)
         std = means.std(ddof=1)
 
@@ -274,21 +278,52 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
         self._means, self._stds = means, clipped_bandwidth
         self._norm_consts, self._logpdf_consts = calculate_norm_consts(
-            lb=self._lb, ub=self._ub, means=self._means, stds=self._stds
+            lb=self.lb, ub=self.ub, means=self._means, stds=self._stds
         )
 
     @property
     def domain_size(self) -> NumericType:
-        return self._ub - self._lb
+        return self.ub - self.lb
 
     @property
     def size(self) -> int:
         return self._size
 
+    @property
+    def lb(self) -> NumericType:
+        return self._lb
+
+    @property
+    def ub(self) -> NumericType:
+        return self._ub
+
+    @property
+    def q(self) -> Optional[NumericType]:
+        return self._q
+
 
 class CategoricalParzenEstimator(AbstractParzenEstimator):
     def __init__(self, samples: np.ndarray, n_choices: int, top: float, *, prior: bool = True):
 
+        self._validate(samples, n_choices)
+
+        self._dtype = np.int32
+        self._size = samples.size + prior
+        self._samples = np.append(samples, NULL_VALUE) if prior else samples.copy()
+        self._n_choices = n_choices
+        # AitchisonAitkenKernel: p = top or (1 - top) / (c - 1)
+        # UniformKernel: p = 1 / c
+        self._top, self._bottom, self._uniform = top, (1 - top) / (n_choices - 1), 1.0 / n_choices
+        self._weight = uniform_weight(self.size)
+        self._probs = self._get_probs(samples, prior)
+        bls = self._get_basislikelihoods(samples)
+        self._basis_loglikelihoods = np.log(bls)
+        self._cum_basis_likelihoods = np.cumsum(bls, axis=-1)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(n_choices={self.n_choices}, top={self._top}, probs={self._probs})"
+
+    def _validate(self, samples: np.ndarray, n_choices: int) -> None:
         if samples.dtype not in [np.int32, np.int64]:
             raise ValueError(
                 f"samples for {self.__class__.__name__} must be np.ndarray[np.int32/64], " f"but got {samples.dtype}."
@@ -296,38 +331,31 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         if np.any(samples < 0) or np.any(samples >= n_choices):
             raise ValueError("All the samples must be in [0, n_choices).")
 
-        self._dtype = np.int32
-        self._size = samples.size + prior
-        self._samples = np.append(samples, NULL_VALUE)
-        self._n_choices = n_choices
-        # AitchisonAitkenKernel: p = top or (1 - top) / (c - 1)
-        # UniformKernel: p = 1 / c
-        self._top, self._bottom, self._uniform = top, (1 - top) / (n_choices - 1), 1.0 / n_choices
-        self._weight = uniform_weight(self.size)
-        indices, counts = np.unique(samples, return_counts=True)
-        # if we use prior, apply uniform prior so that the initial value is 1 / c.
-        self._probs = np.full(n_choices, self._uniform * prior)
-
-        slicer = np.arange(n_choices)
-        for idx, count in zip(indices, counts):
-            self._probs[slicer != idx] += count * self._bottom
-            self._probs[slicer == idx] += count * self._top
-
-        self._probs *= self._weight
+    def _get_basislikelihoods(self, samples: np.ndarray) -> np.ndarray:
+        n_choices = self.n_choices
         likelihood_choices = np.array(
             [[self._top if i == j else self._bottom for j in range(n_choices)] for i in range(n_choices)]
         )
 
         # shape = (n_basis, n_choices)
-        bls = np.maximum(1e-12, np.vstack([likelihood_choices[samples], np.full(n_choices, self._uniform)]))
-        self._basis_loglikelihoods = np.log(bls)
-        self._cum_basis_likelihoods = np.cumsum(bls, axis=-1)
+        return np.maximum(1e-12, np.vstack([likelihood_choices[samples], np.full(n_choices, self._uniform)]))
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(n_choices={self._n_choices}, top={self._top}, probs={self._probs})"
+    def _get_probs(self, samples: np.ndarray, prior: bool) -> np.ndarray:
+        indices, counts = np.unique(samples, return_counts=True)
+        n_choices = self.n_choices
+        # if we use prior, apply uniform prior so that the initial value is 1 / c
+        probs = np.full(n_choices, self._uniform * prior)
+
+        slicer = np.arange(n_choices)
+        for idx, count in zip(indices, counts):
+            probs[slicer != idx] += count * self._bottom
+            probs[slicer == idx] += count * self._top
+
+        probs *= self._weight
+        return probs
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
-        scaled_x = x * (self._n_choices - 1)
+        scaled_x = x * (self.n_choices - 1)
         return scaled_x.astype(self._dtype)
 
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
@@ -337,7 +365,7 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         return self._probs[x]
 
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
-        return rng.choice(self._n_choices, p=self._probs, size=n_samples)
+        return rng.choice(self.n_choices, p=self._probs, size=n_samples)
 
     def sample_by_indices(self, rng: np.random.RandomState, indices: np.ndarray) -> np.ndarray:
         n_samples = indices.size
@@ -346,14 +374,52 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
 
     @property
     def domain_size(self) -> NumericType:
-        return self._n_choices
+        return self.n_choices
 
     @property
     def size(self) -> int:
         return self._size
 
+    @property
+    def n_choices(self) -> int:
+        return self._n_choices
+
 
 ParzenEstimatorType = Union[NumericalParzenEstimator, CategoricalParzenEstimator]
+
+
+def _get_config_info(
+    config: NumericalHPType, is_ordinal: bool
+) -> Tuple[Optional[NumericType], bool, NumericType, NumericType]:
+    if is_ordinal:
+        info = config.meta
+        q, log, lb, ub = info.get("q", None), info.get("log", False), info["lower"], info["upper"]
+    else:
+        q, log, lb, ub = config.q, config.log, config.lower, config.upper
+
+    return q, log, lb, ub
+
+
+def _convert_info_for_discrete(
+    dtype: Type[Union[float, int]],
+    q: Optional[NumericType],
+    log: bool,
+    lb: NumericType,
+    ub: NumericType,
+) -> Tuple[Optional[NumericType], Optional[NumericType], NumericType, NumericType]:
+
+    hard_lb: Optional[NumericType] = None
+    if dtype is int or q is not None:
+        if log:
+            q = None
+        elif q is None:
+            q = 1
+        if q is not None:
+            hard_lb = lb
+            lb -= 0.5 * q
+            ub += 0.5 * q
+
+    return q, hard_lb, lb, ub
 
 
 def build_numerical_parzen_estimator(
@@ -378,23 +444,8 @@ def build_numerical_parzen_estimator(
         pe (NumericalParzenEstimator): Parzen estimator given a set of observations
     """
     min_bandwidth_factor = _get_min_bandwidth_factor(config, is_ordinal, default_min_bandwidth_factor)
-
-    if is_ordinal:
-        info = config.meta
-        q, log, lb, ub = info.get("q", None), info.get("log", False), info["lower"], info["upper"]
-    else:
-        q, log, lb, ub = config.q, config.log, config.lower, config.upper
-
-    hard_lb: Optional[NumericType] = None
-    if dtype is int or q is not None:
-        if log:
-            q = None
-        elif q is None:
-            q = 1
-        if q is not None:
-            hard_lb = lb
-            lb -= 0.5 * q
-            ub += 0.5 * q
+    q, log, lb, ub = _get_config_info(config, is_ordinal)
+    q, hard_lb, lb, ub = _convert_info_for_discrete(dtype=dtype, q=q, log=log, lb=lb, ub=ub)
 
     if log:
         dtype = float
