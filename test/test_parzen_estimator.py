@@ -430,6 +430,12 @@ class TestBuildParzenEstimators(unittest.TestCase):
         except Exception as e:
             raise ValueError(f"test_build_numerical_parzen_estimator failed with {e}.")
 
+        vals = np.arange(3)
+        try:
+            build_categorical_parzen_estimator(config=C, vals=vals, vals_is_indices=True)
+        except Exception as e:
+            raise ValueError(f"test_build_numerical_parzen_estimator failed with {e}.")
+
     def test_build_numerical_parzen_estimator(self) -> None:
         lb, ub, q = 1, 100, 0.5
         x = CSH.UniformFloatHyperparameter("x", lower=lb, upper=ub)

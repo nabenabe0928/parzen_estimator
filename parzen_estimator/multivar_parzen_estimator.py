@@ -169,6 +169,7 @@ def get_multivar_pdf(
     *,
     default_min_bandwidth_factor: float = 1e-2,
     prior: bool = True,
+    vals_for_categorical_is_indices: bool = False,
 ) -> MultiVariateParzenEstimator:
 
     hp_names = config_space.get_hyperparameter_names()
@@ -182,6 +183,7 @@ def get_multivar_pdf(
         kwargs = dict(vals=observations[hp_name], config=config, prior=prior)
 
         if is_categorical:
+            kwargs.update(vals_is_indices=vals_for_categorical_is_indices)
             parzen_estimators[hp_name] = build_categorical_parzen_estimator(**kwargs)
         else:
             kwargs.update(

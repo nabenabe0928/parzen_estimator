@@ -467,7 +467,7 @@ def build_numerical_parzen_estimator(
 
 
 def build_categorical_parzen_estimator(
-    config: CategoricalHPType, vals: np.ndarray, top: float = 1.0, *, prior: bool = True
+    config: CategoricalHPType, vals: np.ndarray, top: float = 1.0, *, prior: bool = True, vals_is_indices: bool = False
 ) -> CategoricalParzenEstimator:
     """
     Build a categorical parzen estimator
@@ -476,6 +476,7 @@ def build_categorical_parzen_estimator(
         config (CategoricalHPType): Hyperparameter information from the ConfigSpace
         vals (np.ndarray): The observed hyperparameter values (i.e. symbols, but not indices)
         top (float): The hyperparameter to define the probability of the category.
+        vals_is_indices (bool): Whether the vals is an array of indices or choices.
 
     Returns:
         pe (CategoricalParzenEstimator): Parzen estimators given a set of observations
@@ -483,13 +484,17 @@ def build_categorical_parzen_estimator(
     choices = config.choices
     n_choices = len(choices)
 
-    try:
-        choice_indices = np.array([choices.index(val) for val in vals], dtype=np.int32)
-    except ValueError:
-        raise ValueError(
-            "vals to build categorical parzen estimator must be "
-            f"the list of symbols {choices}, but got the list of indices."
-        )
+    if vals_is_indices:
+        choice_indices = vals
+    else:
+        try:
+            choice2index = {choice: idx for idx, choice in enumerate(choices)}
+            choice_indices = np.array([choice2index[val] for val in vals], dtype=np.int32)
+        except KeyError:
+            raise ValueError(
+                "vals to build categorical parzen estimator must be "
+                f"the list of symbols {choices}, but got the list of indices."
+            )
 
     pe = CategoricalParzenEstimator(samples=choice_indices, n_choices=n_choices, top=top, prior=prior)
 

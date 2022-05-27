@@ -12,7 +12,7 @@ from parzen_estimator.multivar_parzen_estimator import (  # noqa: I100
 )
 
 
-__version__ = "0.1.2"
+__version__ = "0.1.4"
 __copyright__ = "Copyright (C) 2022 Shuhei Watanabe"
 __licence__ = "Apache-2.0 License"
 __author__ = "Shuhei Watanabe"
