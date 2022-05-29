@@ -23,7 +23,7 @@ def _get_min_bandwidth_factor(
     config: CS.hyperparameters, is_ordinal: bool, default_min_bandwidth_factor: float
 ) -> float:
 
-    if config.meta and "min_bandwidth_factor" in config.meta:
+    if config.meta is not None and "min_bandwidth_factor" in config.meta:
         return config.meta["min_bandwidth_factor"]
     if is_ordinal:
         return 1.0 / len(config.sequence)
@@ -154,7 +154,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
-        self._hard_lb = hard_lb if hard_lb else lb
+        self._hard_lb = hard_lb if hard_lb is not None else lb
         self._size = samples.size + prior
         self._dtype: Type[np.number]
         self._validate(dtype, samples)
