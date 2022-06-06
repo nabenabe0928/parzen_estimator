@@ -1,6 +1,6 @@
 import pytest
 import unittest
-from typing import Dict, Union
+from typing import Dict, Tuple, Union
 
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
@@ -12,11 +12,38 @@ from parzen_estimator import (
     MultiVariateParzenEstimator,
     NumericalParzenEstimator,
     get_multivar_pdf,
+    over_resample,
 )
 from parzen_estimator.constants import NULL_VALUE
 
 
 PARAM_NAMES = ["n1", "n2", "c1"]
+
+
+def get_random_config(n_configs: int = 10) -> Tuple[CS.ConfigurationSpace, Dict[str, np.ndarray]]:
+    config_space = CS.ConfigurationSpace()
+    meta_info = {"lower": -2, "upper": 1}
+    config_space.add_hyperparameters(
+        [
+            CSH.UniformFloatHyperparameter("x0", lower=-2, upper=3),
+            CSH.UniformIntegerHyperparameter("x1", lower=-2, upper=2),
+            CSH.OrdinalHyperparameter("x2", sequence=list(range(-2, 2)), meta=meta_info),
+            CSH.CategoricalHyperparameter("x3", choices=["a", "b"]),
+        ]
+    )
+    return config_space, {
+        f"x{d}": np.array([config_space.sample_configuration()[f"x{d}"] for _ in range(n_configs)]) for d in range(4)
+    }
+
+
+def test_over_resample() -> None:
+    n_resamples = 100
+    config_space, observations = get_random_config()
+    pdf = over_resample(
+        config_space=config_space, observations=observations, n_resamples=n_resamples, rng=np.random.RandomState()
+    )
+    assert pdf.size == n_resamples
+    assert pdf.dim == len(observations)
 
 
 def test_get_multivar_pdf() -> None:
@@ -49,6 +76,7 @@ def test_get_multivar_pdf() -> None:
     }
     pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=True)
     assert pdf.dim == dim
+    assert np.isclose(pdf.hypervolume, 93912989.81820744)
     assert pdf.size == size + 1
     assert pdf.param_names == np.sort(config_space.get_hyperparameter_names()).tolist()
 

@@ -9,10 +9,11 @@ from parzen_estimator.multivar_parzen_estimator import (  # noqa: I100
     MultiVariateParzenEstimator,
     ParzenEstimatorType,
     get_multivar_pdf,
+    over_resample,
 )
 
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __copyright__ = "Copyright (C) 2022 Shuhei Watanabe"
 __licence__ = "Apache-2.0 License"
 __author__ = "Shuhei Watanabe"
@@ -29,4 +30,5 @@ __all__ = [
     "_get_min_bandwidth_factor",
     "build_categorical_parzen_estimator",
     "build_numerical_parzen_estimator",
+    "over_resample",
 ]

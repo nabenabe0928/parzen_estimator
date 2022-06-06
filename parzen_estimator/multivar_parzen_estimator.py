@@ -43,6 +43,7 @@ class MultiVariateParzenEstimator:
         self._dim = len(parzen_estimators)
         self._size = list(parzen_estimators.values())[0].size
         self._weight = uniform_weight(self._size)
+        self._hypervolume = np.prod([float(pe.domain_size) for pe in parzen_estimators.values()])
 
         if any(pe.size != self._size for pe in parzen_estimators.values()):
             raise ValueError("All parzen estimators must be identical.")
@@ -184,6 +185,10 @@ class MultiVariateParzenEstimator:
     def param_names(self) -> List[str]:
         return self._param_names[:]
 
+    @property
+    def hypervolume(self) -> float:
+        return self._hypervolume
+
 
 def get_multivar_pdf(
     observations: Dict[str, np.ndarray],
@@ -216,3 +221,33 @@ def get_multivar_pdf(
             parzen_estimators[hp_name] = build_numerical_parzen_estimator(**kwargs)
 
     return MultiVariateParzenEstimator(parzen_estimators)
+
+
+def over_resample(
+    config_space: CS.ConfigurationSpace,
+    observations: Dict[str, np.ndarray],
+    n_resamples: int,
+    rng: np.random.RandomState,
+    default_min_bandwidth_factor: float = 1e-1,
+    prior: bool = False,
+    dim_independent_resample: bool = False,
+) -> MultiVariateParzenEstimator:
+    mvpdf = get_multivar_pdf(
+        observations=observations,
+        config_space=config_space,
+        default_min_bandwidth_factor=default_min_bandwidth_factor,
+        prior=prior,
+    )
+    resampled_configs = {
+        param_name: samples
+        for param_name, samples in zip(
+            mvpdf.param_names, mvpdf.sample(n_samples=n_resamples, rng=rng, dim_independent=dim_independent_resample)
+        )
+    }
+    return get_multivar_pdf(
+        observations=resampled_configs,
+        config_space=config_space,
+        default_min_bandwidth_factor=default_min_bandwidth_factor,
+        prior=False,
+        vals_for_categorical_is_indices=True,
+    )
