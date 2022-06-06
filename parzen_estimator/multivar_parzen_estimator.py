@@ -20,6 +20,7 @@ from scipy.stats.qmc import Sobol
 
 SAMPLING_CHOICES = {"sobol": Sobol, "lhs": LHS}
 ParzenEstimatorType = Union[CategoricalParzenEstimator, NumericalParzenEstimator]
+SampleDataType = Union[List[np.ndarray], np.ndarray, Dict[str, np.ndarray]]
 
 
 class MultiVariateParzenEstimator:
@@ -38,6 +39,7 @@ class MultiVariateParzenEstimator:
                 The weight value for each basis.
         """
         self._parzen_estimators = parzen_estimators
+        self._param_names = list(parzen_estimators.keys())
         self._dim = len(parzen_estimators)
         self._size = list(parzen_estimators.values())[0].size
         self._weight = uniform_weight(self._size)
@@ -50,33 +52,43 @@ class MultiVariateParzenEstimator:
             [f"({idx + 1}): {hp_name}\n{pe}" for idx, (hp_name, pe) in enumerate(self._parzen_estimators.items())]
         )
 
-    def dimension_wise_pdf(self, X: List[np.ndarray]) -> np.ndarray:
+    def _convert_X_dict_to_X_list(self, X: SampleDataType) -> List[np.ndarray]:
+        return X if isinstance(X, list) else [X[param_name] for param_name in self._param_names]
+
+    def _convert_X_list_to_X_dict(self, X: SampleDataType) -> Dict[str, np.ndarray]:
+        return X if isinstance(X, dict) else {param_name: X[dim] for dim, param_name in enumerate(self._param_names)}
+
+    def dimension_wise_pdf(self, X: SampleDataType, return_dict: bool = False) -> SampleDataType:
         """
         Compute the probability density value in each dimension given data points X.
 
         Args:
-            X (List[np.ndarray]):
+            X (SampleDataType):
                 Data points with the shape of (dim, n_samples)
+            return_dict (bool):
+                Whether the return should be dict or list.
 
         Returns:
-            pdf_values (np.ndarray):
+            pdf_values (SampleDataType):
                 The density values in each dimension for each data point.
                 The shape is (dim, n_samples).
         """
-        n_samples = X[0].size
+        _X = self._convert_X_dict_to_X_list(X)
+        n_samples = _X[0].size
         pdfs = np.zeros((self._dim, n_samples))
 
-        for d, (hp_name, pe) in enumerate(self._parzen_estimators.items()):
-            pdfs[d] += pe.pdf(X[d])
+        for dim, param_name in enumerate(self._param_names):
+            pe = self._parzen_estimators[param_name]
+            pdfs[dim] += pe.pdf(_X[dim])
 
-        return pdfs
+        return self._convert_X_list_to_X_dict(pdfs) if return_dict else pdfs
 
-    def log_pdf(self, X: np.ndarray) -> np.ndarray:
+    def log_pdf(self, X: SampleDataType) -> np.ndarray:
         """
         Compute the probability density value given data points X.
 
         Args:
-            X (np.ndarray):
+            X (SampleDataType):
                 Data points with the shape of (dim, n_samples)
 
         Returns:
@@ -84,21 +96,22 @@ class MultiVariateParzenEstimator:
                 The log density values for each data point.
                 The shape is (n_samples, ).
         """
-        n_samples = X[0].size
+        _X = self._convert_X_dict_to_X_list(X)
+        n_samples = _X[0].size
         blls = np.zeros((self._dim, self._size, n_samples))
 
         for d, (hp_name, pe) in enumerate(self._parzen_estimators.items()):
-            blls[d] += pe.basis_loglikelihood(X[d])
+            blls[d] += pe.basis_loglikelihood(_X[d])
 
         config_ll = compute_config_loglikelihoods(blls, self._weight)
         return config_ll
 
-    def pdf(self, X: np.ndarray) -> np.ndarray:
+    def pdf(self, X: SampleDataType) -> np.ndarray:
         """
         Compute the probability density value given data points X.
 
         Args:
-            X (np.ndarray):
+            X (SampleDataType):
                 Data points with the shape of (dim, n_samples)
 
         Returns:
@@ -108,7 +121,13 @@ class MultiVariateParzenEstimator:
         """
         return exp(self.log_pdf(X))
 
-    def sample(self, n_samples: int, rng: np.random.RandomState, dim_independent: bool = False) -> List[np.ndarray]:
+    def sample(
+        self,
+        n_samples: int,
+        rng: np.random.RandomState,
+        dim_independent: bool = False,
+        return_dict: bool = False,
+    ) -> SampleDataType:
         samples = []
         if dim_independent:
             samples = [pe.sample(rng, n_samples) for d, pe in enumerate(self._parzen_estimators.values())]
@@ -116,14 +135,15 @@ class MultiVariateParzenEstimator:
             indices = rng.randint(self._size, size=n_samples)
             samples = [pe.sample_by_indices(rng, indices) for d, pe in enumerate(self._parzen_estimators.values())]
 
-        return samples
+        return self._convert_X_list_to_X_dict(samples) if return_dict else samples
 
     def uniform_sample(
         self,
         n_samples: int,
         rng: np.random.RandomState,
         sampling_method: str = "sobol",  # Literal["sobol", "lhs"]
-    ) -> List[np.ndarray]:
+        return_dict: bool = False,
+    ) -> SampleDataType:
         """
         Sample points using latin hypercube sampling.
 
@@ -132,9 +152,11 @@ class MultiVariateParzenEstimator:
                 The list that contains the information of each dimension.
             n_samples (int):
                 The number of samples.
+            return_dict (bool):
+                Whether the return should be dict or list.
 
         Returns:
-            samples (List[np.ndarray]):
+            samples (SampleDataType):
                 Random samplings converted accordingly.
                 The shape is (dim, n_samples).
         """
@@ -148,7 +170,7 @@ class MultiVariateParzenEstimator:
         for d, pe in enumerate(self._parzen_estimators.values()):
             samples[d] = pe.uniform_to_valid_range(samples[d])
 
-        return samples
+        return self._convert_X_list_to_X_dict(samples) if return_dict else samples
 
     @property
     def size(self) -> int:
@@ -159,8 +181,8 @@ class MultiVariateParzenEstimator:
         return self._dim
 
     @property
-    def hp_names(self) -> List[str]:
-        return list(self._parzen_estimators.keys())
+    def param_names(self) -> List[str]:
+        return self._param_names[:]
 
 
 def get_multivar_pdf(

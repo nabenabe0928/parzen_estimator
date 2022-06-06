@@ -8,7 +8,7 @@ TPE is an hyperparameter optimization (HPO) method invented in [`Algorithms for 
 **NOTE**: The parzen estimators are built based on the [BOHB](http://proceedings.mlr.press/v80/falkner18a/falkner18a.pdf) implementation.
 
 # Setup
-This package requires python 3.8 or later version and you can install 
+This package requires python 3.7 or later version and you can install 
 
 ```
 pip install parzen-estimator
@@ -16,4 +16,4 @@ pip install parzen-estimator
 
 # Running example
 
-Please see [examples](examples/).
+Please see [examples](examples/visualize_kde.ipynb).

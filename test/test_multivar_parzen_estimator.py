@@ -16,6 +16,9 @@ from parzen_estimator import (
 from parzen_estimator.constants import NULL_VALUE
 
 
+PARAM_NAMES = ["n1", "n2", "c1"]
+
+
 def test_get_multivar_pdf() -> None:
     dim, size = 15, 20
     config_space = CS.ConfigurationSpace()
@@ -47,12 +50,12 @@ def test_get_multivar_pdf() -> None:
     pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=True)
     assert pdf.dim == dim
     assert pdf.size == size + 1
-    assert pdf.hp_names == np.sort(config_space.get_hyperparameter_names()).tolist()
+    assert pdf.param_names == np.sort(config_space.get_hyperparameter_names()).tolist()
 
     pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=False)
     assert pdf.dim == dim
     assert pdf.size == size
-    assert pdf.hp_names == np.sort(config_space.get_hyperparameter_names()).tolist()
+    assert pdf.param_names == np.sort(config_space.get_hyperparameter_names()).tolist()
 
 
 def default_multivar_pe(top: float = 0.8) -> MultiVariateParzenEstimator:
@@ -86,6 +89,24 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         with pytest.raises(ValueError):
             MultiVariateParzenEstimator(pes)
 
+    def test_convert_X_dict_to_X_list(self) -> None:
+        mvpe = default_multivar_pe()
+        samples = mvpe.sample(n_samples=20, rng=np.random.RandomState())
+        ans = samples.copy()
+        assert isinstance(samples, list)
+        res = mvpe._convert_X_dict_to_X_list({name: samples[dim] for dim, name in enumerate(PARAM_NAMES)})
+        assert isinstance(ans, list)
+        assert np.allclose(res, ans)
+
+    def test_convert_X_list_to_X_dict(self) -> None:
+        mvpe = default_multivar_pe()
+        samples = mvpe.sample(n_samples=20, rng=np.random.RandomState())
+        assert isinstance(samples, list)
+        ans = {name: samples[dim] for dim, name in enumerate(PARAM_NAMES)}
+        res = mvpe._convert_X_list_to_X_dict(samples)
+        assert isinstance(ans, dict)
+        assert np.all([np.allclose(res[name], ans[name]) for name in PARAM_NAMES])
+
     def test_dimension_wise_pdf(self) -> None:
         mvpe = default_multivar_pe()
         X = []
@@ -101,8 +122,16 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         n_choices = mvpe._parzen_estimators["c1"]._n_choices
         X.append(np.random.randint(n_choices, size=100))
 
-        for pe, pdf_val, x in zip(mvpe._parzen_estimators.values(), mvpe.dimension_wise_pdf(X), X):
-            assert np.allclose(pe.pdf(x), pdf_val)
+        X_dict = {name: X[dim] for dim, name in enumerate(PARAM_NAMES)}
+        for return_dict in [True, False]:
+            for _X in [X_dict, X]:
+                pdf_vals = mvpe.dimension_wise_pdf(_X, return_dict=return_dict)
+                if return_dict:
+                    assert isinstance(pdf_vals, dict)
+                    pdf_vals = [pdf_vals[name] for name in PARAM_NAMES]
+
+                for pe, pdf_val, x in zip(mvpe._parzen_estimators.values(), pdf_vals, X):
+                    assert np.allclose(pe.pdf(x), pdf_val)
 
     def test_pdf_and_log_pdf(self) -> None:
         mvpe = default_multivar_pe()
@@ -120,10 +149,12 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         n_choices = mvpe._parzen_estimators["c1"]._n_choices
         X.append(np.random.randint(n_choices, size=size))
 
-        pdf_vals = mvpe.pdf(X)
-        log_pdf_vals = mvpe.log_pdf(X)
-        assert pdf_vals.size == size
-        assert np.allclose(pdf_vals, np.exp(log_pdf_vals))
+        X_dict = {name: X[dim] for dim, name in enumerate(PARAM_NAMES)}
+        for _X in [X, X_dict]:
+            pdf_vals = mvpe.pdf(X)
+            log_pdf_vals = mvpe.log_pdf(X)
+            assert pdf_vals.size == size
+            assert np.allclose(pdf_vals, np.exp(log_pdf_vals))
 
     def test_pdf_by_integral(self) -> None:
         lb, ub, n_choices, size = -3, 3, 4, 10
@@ -167,6 +198,7 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         n_samples = 30
         at_least_one_is_independent = False
         samples = mvpe.sample(n_samples=n_samples, rng=np.random.RandomState(), dim_independent=True)
+        assert isinstance(samples, list)
         for i in range(n_samples):
             sampled_config = [samples[d][i] for d in range(3)]
             dependent = False
@@ -182,6 +214,7 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
 
         assert at_least_one_is_independent
 
+    # uniform_sample
     def test_sample(self) -> None:
         mvpe = default_multivar_pe(top=1.0)
         size = mvpe.size
@@ -200,6 +233,7 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
 
         n_samples = 30
         samples = mvpe.sample(n_samples=n_samples, rng=np.random.RandomState())
+        assert isinstance(samples, list)
         for i in range(n_samples):
             sampled_config = [samples[d][i] for d in range(3)]
             ok = False
@@ -213,11 +247,17 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
 
             assert ok
 
+        samples = mvpe.sample(n_samples=n_samples, rng=np.random.RandomState(0))
+        samples_dict = mvpe.sample(n_samples=n_samples, rng=np.random.RandomState(0), return_dict=True)
+        assert isinstance(samples_dict, dict)
+        assert np.allclose(samples, [samples_dict[name] for name in PARAM_NAMES])
+
     def test_uniform_sample(self) -> None:
         mvpe = default_multivar_pe()
-        rng = np.random.RandomState()
+        rng = np.random.RandomState(0)
         size = 1 << 8
         samples = mvpe.uniform_sample(n_samples=size, rng=rng)
+        assert isinstance(samples, list)
         assert len(samples) == mvpe.dim
         assert all(s.size == size for s in samples)
 
@@ -232,6 +272,11 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         assert all(s in np.arange(-3, 4) for s in samples[1])
         n_choices = mvpe._parzen_estimators["c1"]._n_choices
         assert all(s in np.arange(n_choices) for s in samples[2])
+
+        rng = np.random.RandomState(0)
+        samples_dict = mvpe.uniform_sample(n_samples=size, rng=rng, return_dict=True)
+        assert isinstance(samples_dict, dict)
+        assert np.allclose(samples, [samples_dict[name] for name in PARAM_NAMES])
 
     def test_error_in_uniform_sample(self) -> None:
         with pytest.raises(ValueError):
