@@ -53,6 +53,15 @@ class MultiVariateParzenEstimator:
             [f"({idx + 1}): {hp_name}\n{pe}" for idx, (hp_name, pe) in enumerate(self._parzen_estimators.items())]
         )
 
+    def __len__(self) -> int:
+        return self._dim
+
+    def __getitem__(self, key: str) -> ParzenEstimatorType:
+        return self._parzen_estimators[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._parzen_estimators
+
     def _convert_X_dict_to_X_list(self, X: SampleDataType) -> List[np.ndarray]:
         return X if isinstance(X, list) else [X[param_name] for param_name in self._param_names]
 

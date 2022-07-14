@@ -105,6 +105,20 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
         assert mvpe.dim == 3
         assert mvpe.size == 10 + 1
 
+    def test_special_methods(self) -> None:
+        mvpe = default_multivar_pe()
+        assert len(mvpe) == 3
+        assert isinstance(mvpe["c1"], CategoricalParzenEstimator)
+        assert isinstance(mvpe["n1"], NumericalParzenEstimator)
+        assert isinstance(mvpe["n2"], NumericalParzenEstimator)
+        with pytest.raises(KeyError):
+            mvpe["n3"]
+
+        assert "c1" in mvpe
+        assert "n1" in mvpe
+        assert "n2" in mvpe
+        assert "n3" not in mvpe
+
     def test_error_in_init(self) -> None:
         lb, ub, n_choices, size = -3, 3, 4, 10
         samples = np.random.random(size=size + 1) * (ub - lb) + lb
