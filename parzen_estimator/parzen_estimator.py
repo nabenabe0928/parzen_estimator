@@ -67,6 +67,9 @@ def calculate_norm_consts(
 
 
 class AbstractParzenEstimator(metaclass=ABCMeta):
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return self.pdf(x)
+
     @abstractmethod
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
         raise NotImplementedError

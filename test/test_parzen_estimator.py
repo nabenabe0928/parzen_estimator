@@ -256,6 +256,7 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub)
         x = np.linspace(-3, 3, 1000)
         bll = pe.basis_loglikelihood(x)
+        assert np.allclose(pe.pdf(x), pe(x))
         # Calculate integral
         assert 0.99 < pe.pdf(x).mean() * (ub - lb) < 1.01
         assert np.allclose(np.exp(bll).mean(axis=0), pe.pdf(x))
@@ -265,6 +266,7 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1)
         x = np.arange(-3, 4)
         bll = pe.basis_loglikelihood(x)
+        assert np.allclose(pe.pdf(x), pe(x))
         # Calculate integral
         assert 0.99 < pe.pdf(x).sum() < 1.01
         assert np.allclose(np.exp(bll).mean(axis=0), pe.pdf(x))
@@ -381,6 +383,7 @@ class TestCategoricalParzenEstimator(unittest.TestCase):
         pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=0.7)
         assert pe.size == 41
         x = np.arange(4)
+        assert np.allclose(pe.pdf(x), pe(x))
         # Calculate integral
         assert 0.99 < pe.pdf(x).sum() < 1.01
         assert np.allclose(pe.pdf(x), [0.25] * 4)
@@ -389,6 +392,7 @@ class TestCategoricalParzenEstimator(unittest.TestCase):
         top = 0.7
         pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=top)
         x = np.arange(4)
+        assert np.allclose(pe.pdf(x), pe(x))
         # Calculate integral
         assert 0.99 < pe.pdf(x).sum() < 1.01
         high = (top + 0.25) / 2
