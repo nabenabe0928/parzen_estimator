@@ -66,6 +66,18 @@ def calculate_norm_consts(
     return norm_consts, logpdf_consts
 
 
+def validate_and_update_dtype(dtype: Type[Union[np.number, int, float]]) -> Type[np.number]:
+    dtype_choices = (np.int32, np.int64, np.float32, np.float64)
+    if dtype is int:
+        return np.int32
+    elif dtype is float:
+        return np.float64
+    elif dtype in dtype_choices:
+        return dtype  # type: ignore
+    else:
+        raise ValueError(f"dtype for numerical pdf must be {dtype_choices}, but got {dtype}")
+
+
 class AbstractParzenEstimator(metaclass=ABCMeta):
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self.pdf(x)
@@ -171,16 +183,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         return ret + ")"
 
     def _validate(self, dtype: Type[Union[np.number, int, float]], samples: np.ndarray) -> None:
-        dtype_choices = (np.int32, np.int64, np.float32, np.float64)
         lb, ub, q = self.lb, self.ub, self.q
-        if dtype is int:
-            self._dtype = np.int32
-        elif dtype is float:
-            self._dtype = np.float64
-        elif dtype in dtype_choices:
-            self._dtype = dtype  # type: ignore
-        else:
-            raise ValueError(f"dtype for {self.__class__.__name__} must be {dtype_choices}, but got {dtype}")
+        self._dtype = validate_and_update_dtype(dtype=dtype)
         if np.any(samples < lb) or np.any(samples > ub):
             raise ValueError(f"All the samples must be in [{lb}, {ub}].")
         if q is not None:

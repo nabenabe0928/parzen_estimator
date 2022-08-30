@@ -11,9 +11,13 @@ from parzen_estimator.multivar_parzen_estimator import (  # noqa: I100
     get_multivar_pdf,
     over_resample,
 )
+from parzen_estimator.uniform import (
+    CategoricalUniform,
+    NumericalUniform,
+)
 
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 __copyright__ = "Copyright (C) 2022 Shuhei Watanabe"
 __licence__ = "Apache-2.0 License"
 __author__ = "Shuhei Watanabe"
@@ -23,8 +27,10 @@ __url__ = "https://github.com/nabenabe0928/parzen_estimator"
 
 __all__ = [
     "CategoricalParzenEstimator",
+    "CategoricalUniform",
     "MultiVariateParzenEstimator",
     "NumericalParzenEstimator",
+    "NumericalUniform",
     "ParzenEstimatorType",
     "get_multivar_pdf",
     "_get_min_bandwidth_factor",
