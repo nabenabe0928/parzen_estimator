@@ -5,7 +5,7 @@ import numpy as np
 from parzen_estimator.constants import (
     NumericType,
 )
-from parzen_estimator.parzen_estimator import AbstractParzenEstimator, validate_and_update_dtype
+from parzen_estimator.parzen_estimator import AbstractParzenEstimator, validate_and_update_dtype, validate_and_update_q
 
 
 class NumericalUniform(AbstractParzenEstimator):
@@ -19,8 +19,8 @@ class NumericalUniform(AbstractParzenEstimator):
     ):
         self._lb = lb
         self._ub = ub
-        self._q = q
         self._dtype = validate_and_update_dtype(dtype=dtype)
+        self._q = validate_and_update_q(dtype=self._dtype, q=q)
 
     def __repr__(self) -> str:
         ret = f"{self.__class__.__name__}(\n\tlb={self.lb}, ub={self.ub}, q={self.q})"
@@ -52,7 +52,7 @@ class NumericalUniform(AbstractParzenEstimator):
 
     @property
     def domain_size(self) -> NumericType:
-        return self.ub - self.lb
+        return self.ub - self.lb if self.q is None else int(np.round((self.ub - self.lb) / self.q)) + 1
 
     @property
     def lb(self) -> NumericType:

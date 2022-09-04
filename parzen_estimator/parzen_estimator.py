@@ -78,6 +78,16 @@ def validate_and_update_dtype(dtype: Type[Union[np.number, int, float]]) -> Type
         raise ValueError(f"dtype for numerical pdf must be {dtype_choices}, but got {dtype}")
 
 
+def validate_and_update_q(dtype: Type[np.number], q: Optional[NumericType]) -> Optional[NumericType]:
+    if dtype not in (np.int32, np.int64):
+        return q
+
+    if not isinstance(q, int):
+        raise TypeError(f"q must be integer if dtype is np.int32/64, but got {q}")
+
+    return q if q is not None else 1
+
+
 class AbstractParzenEstimator(metaclass=ABCMeta):
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self.pdf(x)
@@ -183,17 +193,19 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         return ret + ")"
 
     def _validate(self, dtype: Type[Union[np.number, int, float]], samples: np.ndarray) -> None:
-        lb, ub, q = self.lb, self.ub, self.q
         self._dtype = validate_and_update_dtype(dtype=dtype)
+        self._q = validate_and_update_q(dtype=self._dtype, q=self.q)
+        lb, ub, q = self.lb, self.ub, self.q
         if np.any(samples < lb) or np.any(samples > ub):
             raise ValueError(f"All the samples must be in [{lb}, {ub}].")
         if q is not None:
+            valid_vals = np.linspace(self._hard_lb, self._ub, self.domain_size)
             cands = np.unique(samples)
             converted_cands = np.round((cands - self._hard_lb) / q) * q + self._hard_lb
             if not np.allclose(cands, converted_cands):
                 raise ValueError(
                     "All the samples for q != None must be discritized appropriately."
-                    f" Expected each value to be in {converted_cands}, but got {cands}"
+                    f" Expected each value to be in {valid_vals}, but got {cands}"
                 )
 
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
@@ -290,7 +302,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
     @property
     def domain_size(self) -> NumericType:
-        return self.ub - self.lb
+        return self.ub - self.lb if self.q is None else int(np.round((self.ub - self.lb) / self.q)) + 1
 
     @property
     def size(self) -> int:

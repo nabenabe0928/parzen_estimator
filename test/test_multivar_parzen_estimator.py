@@ -76,7 +76,7 @@ def test_get_multivar_pdf() -> None:
     }
     pdf = get_multivar_pdf(observations, config_space, default_min_bandwidth_factor=1e-2, prior=True)
     assert pdf.dim == dim
-    assert np.isclose(pdf.hypervolume, 93912989.81820744)
+    assert np.isclose(pdf.hypervolume, 296811424.6106309)
     assert pdf.size == size + 1
     assert pdf.param_names == np.sort(config_space.get_hyperparameter_names()).tolist()
 

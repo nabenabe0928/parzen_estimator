@@ -271,6 +271,9 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         assert 0.99 < pe.pdf(x).sum() < 1.01
         assert np.allclose(np.exp(bll).mean(axis=0), pe.pdf(x))
 
+        with pytest.raises(TypeError):
+            pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1.0, dtype=np.int32)
+
     def test_sample_by_indices(self) -> None:
         lb, ub = -10, 10
         samples = np.arange(-10, 11)
@@ -293,9 +296,21 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         samples = np.arange(-3, 4)
         ans = np.arange(-3, 4)
         for q in [1, None]:
-            pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1)
-            x = np.linspace(0, 1, pe.domain_size + 1)
+            pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=q)
+            x = np.linspace(0, 1, pe.domain_size + (q is None))
             assert np.allclose(pe.uniform_to_valid_range(x), ans)
+
+        samples = np.arange(-3, 4, 2)
+        ans = np.arange(-3, 4, 2)
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=2)
+        x = np.linspace(0, 1, pe.domain_size)
+        assert np.allclose(pe.uniform_to_valid_range(x), ans)
+
+        samples = np.array([-3, -1.5, 0, 1.5, 3])
+        ans = np.array([-3, -1.5, 0, 1.5, 3])
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1.5)
+        x = np.linspace(0, 1, pe.domain_size)
+        assert np.allclose(pe.uniform_to_valid_range(x), ans)
 
 
 class TestCategoricalParzenEstimator(unittest.TestCase):
