@@ -173,6 +173,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         *,
         q: Optional[NumericType] = None,
         hard_lb: Optional[NumericType] = None,
+        hard_ub: Optional[NumericType] = None,
         dtype: Type[Union[np.number, int, float]] = np.float64,
         min_bandwidth_factor: float = 1e-2,
         prior: bool = True,
@@ -180,6 +181,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
         self._lb, self._ub, self._q = lb, ub, q
         self._hard_lb = hard_lb if hard_lb is not None else lb
+        self._hard_ub = hard_ub if hard_ub is not None else ub
         self._size = samples.size + prior
         self._dtype: Type[np.number]
         self._validate(dtype, samples)
@@ -199,7 +201,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         if np.any(samples < lb) or np.any(samples > ub):
             raise ValueError(f"All the samples must be in [{lb}, {ub}].")
         if q is not None:
-            valid_vals = np.linspace(self._hard_lb, self._ub, self.domain_size)
+            valid_vals = np.linspace(self._hard_lb, self._hard_ub, self.domain_size)
             cands = np.unique(samples)
             converted_cands = np.round((cands - self._hard_lb) / q) * q + self._hard_lb
             if not np.allclose(cands, converted_cands):
@@ -302,7 +304,11 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
     @property
     def domain_size(self) -> NumericType:
-        return self.ub - self.lb if self.q is None else int(np.round((self.ub - self.lb) / self.q)) + 1
+        domain_range = self._hard_ub - self._hard_lb
+        if self.q is None:
+            return domain_range
+        else:
+            return int(np.round(domain_range / self.q)) + 1
 
     @property
     def size(self) -> int:
