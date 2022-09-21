@@ -8,6 +8,7 @@ import ConfigSpace.hyperparameters as CSH
 from parzen_estimator.parzen_estimator import (
     CategoricalParzenEstimator,
     NumericalParzenEstimator,
+    _convert_info_for_log_scale,
     _get_min_bandwidth_factor,
     build_categorical_parzen_estimator,
     build_numerical_parzen_estimator,
@@ -55,6 +56,17 @@ def test_get_min_bandwidth() -> None:
         config = config_space.get_hyperparameter(f"x{d}")
         is_ordinal = config.__class__.__name__.startswith("Ordinal")
         assert _get_min_bandwidth_factor(config, is_ordinal, default_min_bandwidth_factor=1e-2) == ans
+
+
+def test_convert_info_for_log_scale() -> None:
+    vals, lb, ub, dtype = _convert_info_for_log_scale(vals=np.array([1, 10, 100]), dtype=int, q=None, lb=1, ub=1000)
+    assert np.allclose(vals, np.log(np.array([1, 10, 100])))
+    assert np.isclose(lb, np.log(1))
+    assert np.isclose(ub, np.log(1000))
+    assert dtype is float
+
+    with pytest.raises(TypeError):
+        _convert_info_for_log_scale(vals=np.array([1, 10, 100]), dtype=int, q=1, lb=1, ub=1000)
 
 
 class TestNumericalParzenEstimator(unittest.TestCase):

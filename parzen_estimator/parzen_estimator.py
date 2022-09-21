@@ -248,7 +248,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
     def _sample(self, rng: np.random.RandomState, idx: int) -> NumericType:
         while True:
             val = rng.normal(loc=self._means[idx], scale=self._stds[idx])
-            if self.lb <= val <= self.ub:
+            if self._hard_lb <= val <= self._hard_ub:
                 return val if self.q is None else np.round((val - self._hard_lb) / self.q) * self.q + self._hard_lb
 
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
@@ -436,20 +436,38 @@ def _convert_info_for_discrete(
     log: bool,
     lb: NumericType,
     ub: NumericType,
-) -> Tuple[Optional[NumericType], Optional[NumericType], NumericType, NumericType]:
+) -> Tuple[Optional[NumericType], Optional[NumericType], Optional[NumericType], NumericType, NumericType]:
 
     hard_lb: Optional[NumericType] = None
+    hard_ub: Optional[NumericType] = None
     if dtype is int or q is not None:
         if log:
             q = None
         elif q is None:
             q = 1
         if q is not None:
-            hard_lb = lb
+            hard_lb, hard_ub = lb, ub
             lb -= 0.5 * q
             ub += 0.5 * q
 
-    return q, hard_lb, lb, ub
+    return q, hard_lb, hard_ub, lb, ub
+
+
+def _convert_info_for_log_scale(
+    vals: np.ndarray,
+    dtype: Type[Union[float, int]],
+    q: Optional[NumericType],
+    lb: NumericType,
+    ub: NumericType,
+) -> Tuple[np.ndarray, NumericType, NumericType, Type[float]]:
+
+    if q is not None:
+        raise TypeError(f"q must be None for log scale, but got {q}")
+
+    dtype = float
+    lb, ub = np.log(lb), np.log(ub)
+    vals = np.log(vals)
+    return vals, lb, ub, dtype
 
 
 def build_numerical_parzen_estimator(
@@ -475,12 +493,10 @@ def build_numerical_parzen_estimator(
     """
     min_bandwidth_factor = _get_min_bandwidth_factor(config, is_ordinal, default_min_bandwidth_factor)
     q, log, lb, ub = _get_config_info(config, is_ordinal)
-    q, hard_lb, lb, ub = _convert_info_for_discrete(dtype=dtype, q=q, log=log, lb=lb, ub=ub)
+    q, hard_lb, hard_ub, lb, ub = _convert_info_for_discrete(dtype=dtype, q=q, log=log, lb=lb, ub=ub)
 
     if log:
-        dtype = float
-        lb, ub = np.log(lb), np.log(ub)
-        vals = np.log(vals)
+        vals, lb, ub, dtype = _convert_info_for_log_scale(vals=vals, dtype=dtype, q=q, lb=lb, ub=ub)
 
     pe = NumericalParzenEstimator(
         samples=vals,
@@ -488,6 +504,7 @@ def build_numerical_parzen_estimator(
         ub=ub,
         q=q,
         hard_lb=hard_lb,
+        hard_ub=hard_ub,
         dtype=dtype,
         min_bandwidth_factor=min_bandwidth_factor,
         prior=prior,
