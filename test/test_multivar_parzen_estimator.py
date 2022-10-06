@@ -1,6 +1,6 @@
 import pytest
 import unittest
-from typing import Dict, Tuple, Union
+from typing import Callable, Dict, Tuple, Union
 
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
@@ -14,7 +14,7 @@ from parzen_estimator import (
     get_multivar_pdf,
     over_resample,
 )
-from parzen_estimator.constants import NULL_VALUE
+from parzen_estimator.constants import NULL_VALUE, uniform_weight
 
 
 PARAM_NAMES = ["n1", "n2", "c1"]
@@ -34,6 +34,25 @@ def get_random_config(n_configs: int = 10) -> Tuple[CS.ConfigurationSpace, Dict[
     return config_space, {
         f"x{d}": np.array([config_space.sample_configuration()[f"x{d}"] for _ in range(n_configs)]) for d in range(4)
     }
+
+
+def dummy_weight_func(size: int) -> np.ndarray:
+    weights = np.arange(size).astype(np.float64) + 1
+    weights /= weights.sum()
+    return weights
+
+
+def test_validate_weights() -> None:
+    lb, ub, n_choices, size = -3, 3, 4, 10
+    samples = np.random.random(size=size) * (ub - lb) + lb
+    choices = np.random.randint(n_choices, size=size)
+    pes: Dict[str, Union[NumericalParzenEstimator, CategoricalParzenEstimator]] = {
+        "n1": NumericalParzenEstimator(samples, lb, ub, weight_func=uniform_weight),
+        "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1, weight_func=uniform_weight),
+        "c1": CategoricalParzenEstimator(choices, n_choices, top=0.9, weight_func=dummy_weight_func),
+    }
+    with pytest.raises(ValueError):
+        MultiVariateParzenEstimator(pes)
 
 
 def test_over_resample() -> None:
@@ -86,14 +105,17 @@ def test_get_multivar_pdf() -> None:
     assert pdf.param_names == np.sort(config_space.get_hyperparameter_names()).tolist()
 
 
-def default_multivar_pe(top: float = 0.8) -> MultiVariateParzenEstimator:
+def default_multivar_pe(
+    top: float = 0.8,
+    weight_func: Callable[[int], np.ndarray] = uniform_weight,
+) -> MultiVariateParzenEstimator:
     lb, ub, n_choices, size = -3, 3, 4, 10
     samples = np.random.random(size=size) * (ub - lb) + lb
     choices = np.random.randint(n_choices, size=size)
     pes: Dict[str, Union[NumericalParzenEstimator, CategoricalParzenEstimator]] = {
-        "n1": NumericalParzenEstimator(samples, lb, ub),
-        "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1),
-        "c1": CategoricalParzenEstimator(choices, n_choices, top=top),
+        "n1": NumericalParzenEstimator(samples, lb, ub, weight_func=weight_func),
+        "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1, weight_func=weight_func),
+        "c1": CategoricalParzenEstimator(choices, n_choices, top=top, weight_func=weight_func),
     }
     mvpe = MultiVariateParzenEstimator(pes)
     return mvpe

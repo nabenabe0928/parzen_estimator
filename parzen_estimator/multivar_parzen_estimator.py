@@ -23,6 +23,16 @@ ParzenEstimatorType = Union[CategoricalParzenEstimator, NumericalParzenEstimator
 SampleDataType = Union[List[np.ndarray], np.ndarray, Dict[str, np.ndarray]]
 
 
+def _validate_weights(weights_array: np.ndarray) -> None:
+    if not np.all(np.all(weights_array == weights_array[0], axis=0)):
+        raise ValueError("weights for all Parzen estimators must be same. " "Check if the same weight_func is used.")
+
+
+def _validate_size(parzen_estimators: Dict[str, ParzenEstimatorType], size: int) -> None:
+    if any(pe.size != size for pe in parzen_estimators.values()):
+        raise ValueError("All parzen estimators must be identical.")
+
+
 class MultiVariateParzenEstimator:
     def __init__(self, parzen_estimators: Dict[str, ParzenEstimatorType]):
         """
@@ -39,14 +49,13 @@ class MultiVariateParzenEstimator:
                 The weight values for each basis.
         """
         self._parzen_estimators = parzen_estimators
+        self._size = list(parzen_estimators.values())[0].size
+        _validate_size(parzen_estimators, size=self._size)
+        _validate_weights(weights_array=np.asarray([pe._weights for pe in parzen_estimators.values()]))
         self._param_names = list(parzen_estimators.keys())
         self._dim = len(parzen_estimators)
-        self._size = list(parzen_estimators.values())[0].size
         self._weights = parzen_estimators[self._param_names[0]]._weights.copy()
         self._hypervolume = np.prod([float(pe.domain_size) for pe in parzen_estimators.values()])
-
-        if any(pe.size != self._size for pe in parzen_estimators.values()):
-            raise ValueError("All parzen estimators must be identical.")
 
     def __repr__(self) -> str:
         return "\n".join(
@@ -142,7 +151,7 @@ class MultiVariateParzenEstimator:
         if dim_independent:
             samples = [pe.sample(rng, n_samples) for d, pe in enumerate(self._parzen_estimators.values())]
         else:
-            indices = rng.randint(self._size, size=n_samples)
+            indices = rng.choice(self._size, p=self._weights, size=n_samples)
             samples = [pe.sample_by_indices(rng, indices) for d, pe in enumerate(self._parzen_estimators.values())]
 
         return self._convert_X_list_to_X_dict(samples) if return_dict else samples
