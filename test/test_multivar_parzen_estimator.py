@@ -47,9 +47,9 @@ def test_validate_weights() -> None:
     samples = np.random.random(size=size) * (ub - lb) + lb
     choices = np.random.randint(n_choices, size=size)
     pes: Dict[str, Union[NumericalParzenEstimator, CategoricalParzenEstimator]] = {
-        "n1": NumericalParzenEstimator(samples, lb, ub, weight_func=uniform_weight),
-        "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1, weight_func=uniform_weight),
-        "c1": CategoricalParzenEstimator(choices, n_choices, top=0.9, weight_func=dummy_weight_func),
+        "n1": NumericalParzenEstimator(samples, lb, ub, weights=None),
+        "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1, weights=None),
+        "c1": CategoricalParzenEstimator(choices, n_choices, top=0.9, weights=dummy_weight_func(size + 1)),
     }
     with pytest.raises(ValueError):
         MultiVariateParzenEstimator(pes)
@@ -112,10 +112,11 @@ def default_multivar_pe(
     lb, ub, n_choices, size = -3, 3, 4, 10
     samples = np.random.random(size=size) * (ub - lb) + lb
     choices = np.random.randint(n_choices, size=size)
+    weights = weight_func(size + 1)
     pes: Dict[str, Union[NumericalParzenEstimator, CategoricalParzenEstimator]] = {
-        "n1": NumericalParzenEstimator(samples, lb, ub, weight_func=weight_func),
-        "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1, weight_func=weight_func),
-        "c1": CategoricalParzenEstimator(choices, n_choices, top=top, weight_func=weight_func),
+        "n1": NumericalParzenEstimator(samples, lb, ub, weights=weights),
+        "n2": NumericalParzenEstimator(samples.astype(np.int32), lb, ub, q=1, weights=weights),
+        "c1": CategoricalParzenEstimator(choices, n_choices, top=top, weights=weights),
     }
     mvpe = MultiVariateParzenEstimator(pes)
     return mvpe

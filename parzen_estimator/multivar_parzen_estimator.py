@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import ConfigSpace as CS
 
@@ -10,7 +10,7 @@ from parzen_estimator import (
     build_categorical_parzen_estimator,
     build_numerical_parzen_estimator,
 )
-from parzen_estimator.constants import config2type, uniform_weight
+from parzen_estimator.constants import config2type
 from parzen_estimator.loglikelihoods import compute_config_loglikelihoods
 from parzen_estimator.utils import exp
 
@@ -25,7 +25,7 @@ SampleDataType = Union[List[np.ndarray], np.ndarray, Dict[str, np.ndarray]]
 
 def _validate_weights(weights_array: np.ndarray) -> None:
     if not np.all(np.all(weights_array == weights_array[0], axis=0)):
-        raise ValueError("weights for all Parzen estimators must be same. " "Check if the same weight_func is used.")
+        raise ValueError("weights for all Parzen estimators must be same. Check if the same weight_func is used.")
 
 
 def _validate_size(parzen_estimators: Dict[str, ParzenEstimatorType], size: int) -> None:
@@ -214,7 +214,7 @@ def get_multivar_pdf(
     *,
     default_min_bandwidth_factor: float = 1e-2,
     prior: bool = True,
-    weight_func: Callable[[int], np.ndarray] = uniform_weight,
+    weights: Optional[np.ndarray] = None,
     vals_for_categorical_is_indices: bool = False,
 ) -> MultiVariateParzenEstimator:
 
@@ -226,7 +226,7 @@ def get_multivar_pdf(
         config_type = config.__class__.__name__
         is_ordinal = config_type.startswith("Ordinal")
         is_categorical = config_type.startswith("Categorical")
-        kwargs = dict(vals=observations[hp_name], config=config, prior=prior, weight_func=weight_func)
+        kwargs = dict(vals=observations[hp_name], config=config, prior=prior, weights=weights)
 
         if is_categorical:
             kwargs.update(vals_is_indices=vals_for_categorical_is_indices)
@@ -250,14 +250,14 @@ def over_resample(
     default_min_bandwidth_factor: float = 1e-1,
     prior: bool = False,
     dim_independent_resample: bool = False,
-    weight_func: Callable[[int], np.ndarray] = uniform_weight,
+    weights: Optional[np.ndarray] = None,
 ) -> MultiVariateParzenEstimator:
     mvpdf = get_multivar_pdf(
         observations=observations,
         config_space=config_space,
         default_min_bandwidth_factor=default_min_bandwidth_factor,
         prior=prior,
-        weight_func=weight_func,
+        weights=weights,
     )
     resampled_configs = {
         param_name: samples
@@ -271,5 +271,5 @@ def over_resample(
         default_min_bandwidth_factor=default_min_bandwidth_factor,
         prior=False,
         vals_for_categorical_is_indices=True,
-        weight_func=weight_func,
+        weights=weights,
     )
