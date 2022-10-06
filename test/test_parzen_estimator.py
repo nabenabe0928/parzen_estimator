@@ -85,11 +85,11 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=False)
         assert np.allclose(pe._means, samples)
         assert pe._stds.size == samples.size
-        assert np.isclose(pe._weight, 1.0 / samples.size)
+        assert np.allclose(pe._weights, np.ones(samples.size) / samples.size)
         pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=True)
         assert np.allclose(pe._means, list(samples) + [0])
         assert pe._stds.size == samples.size + 1
-        assert np.isclose(pe._weight, 1.0 / (samples.size + 1))
+        assert np.allclose(pe._weights, np.ones(samples.size + 1) / (samples.size + 1))
 
     def test_cdf_discrete(self) -> None:
         lb, ub = -50, 50
@@ -169,7 +169,7 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         mus = np.array([0.4372727, 0.44549973])
         lb, ub = 0, 1
         pe = NumericalParzenEstimator(samples=mus, lb=lb, ub=ub)
-        assert np.allclose([pe._weight], [0.33333333])
+        assert np.allclose(pe._weights, [0.33333333] * 3)
         assert np.allclose(pe._means, [0.43727276, 0.44549973, 0.5])
         assert np.allclose(pe._stds, [0.019897270747110334, 0.019897270747110334, 1.0])
         ans = [

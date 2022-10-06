@@ -14,8 +14,18 @@ def log(x: np.ndarray) -> np.ndarray:
     return torch_log(as_tensor(x)).cpu().detach().numpy()
 
 
-def logsumexp(x: np.ndarray, axis: Optional[int], weight: float) -> np.ndarray:
-    return torch_logsumexp(as_tensor(x), axis=axis).cpu().detach().numpy() + np.log(weight)  # type: ignore
+def logsumexp(x: np.ndarray, axis: Optional[int], weights: Optional[np.ndarray] = None) -> np.ndarray:
+    """
+    Output log sum exp(x).
+
+    NOTE:
+        log sum w * exp(x) = log sum exp(log(w)) * exp(x)
+                           = log sum exp(x + log(w))
+    """
+    if weights is not None:
+        x += log(weights)[:, np.newaxis]
+
+    return torch_logsumexp(as_tensor(x), axis=axis).cpu().detach().numpy()
 
 
 def exp(x: np.ndarray) -> np.ndarray:

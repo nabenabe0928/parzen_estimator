@@ -190,8 +190,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
     def __repr__(self) -> str:
         ret = f"{self.__class__.__name__}(\n\tlb={self.lb}, ub={self.ub}, q={self.q},\n"
-        for i, (m, s) in enumerate(zip(self._means, self._stds)):
-            ret += f"\t({i + 1}) weight: {self._weight}, basis: GaussKernel(mean={m}, std={s}),\n"
+        for i, (m, s, w) in enumerate(zip(self._means, self._stds, self._weights)):
+            ret += f"\t({i + 1}) weight: {w}, basis: GaussKernel(mean={m}, std={s}),\n"
         return ret + ")"
 
     def _validate(self, dtype: Type[Union[np.number, int, float]], samples: np.ndarray) -> None:
@@ -223,11 +223,11 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         if self.q is None:
             norm_consts = self._norm_consts / (SQR2PI * self._stds)  # noqa: F841
             mahalanobis = ((x[:, np.newaxis] - self._means) / self._stds) ** 2  # noqa: F841
-            return self._weight * np.sum(norm_consts * exp(-0.5 * mahalanobis), axis=-1)
+            return np.sum(self._weights * norm_consts * exp(-0.5 * mahalanobis), axis=-1)
         else:
             integral_u = self.cdf(np.minimum(x + 0.5 * self.q, self.ub))
             integral_l = self.cdf(np.maximum(x - 0.5 * self.q, self.lb))
-            return self._weight * np.sum(integral_u - integral_l, axis=0)
+            return np.sum(self._weights[:, np.newaxis] * (integral_u - integral_l), axis=0)
 
     def cdf(self, x: np.ndarray) -> np.ndarray:
         """
@@ -252,8 +252,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                 return val if self.q is None else np.round((val - self._hard_lb) / self.q) * self.q + self._hard_lb
 
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
-        weights = np.full(self.size, self._weight)
-        samples = [self._sample(rng, active) for active in rng.choice(self.size, p=weights, size=n_samples)]
+        samples = [self._sample(rng, active) for active in rng.choice(self.size, p=self._weights, size=n_samples)]
         return np.array(samples, dtype=self._dtype)
 
     def sample_by_indices(self, rng: np.random.RandomState, indices: np.ndarray) -> np.ndarray:
@@ -286,7 +285,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         """
         domain_range = self.ub - self.lb
         means = np.append(samples, 0.5 * (self.lb + self.ub)) if prior else samples.copy()
-        self._weight = uniform_weight(means.size)
+        self._weights = uniform_weight(means.size)
         std = means.std(ddof=1)
 
         IQR = np.subtract.reduce(np.percentile(means, [75, 25]))
@@ -339,7 +338,7 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         # AitchisonAitkenKernel: p = top or (1 - top) / (c - 1)
         # UniformKernel: p = 1 / c
         self._top, self._bottom, self._uniform = top, (1 - top) / (n_choices - 1), 1.0 / n_choices
-        self._weight = uniform_weight(self.size)
+        self._weights = uniform_weight(self.size)
         self._probs = self._get_probs(samples, prior)
         bls = self._get_basislikelihoods(samples, prior)
         self._basis_loglikelihoods = np.log(bls)
@@ -371,17 +370,18 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         return np.maximum(1e-12, blls)
 
     def _get_probs(self, samples: np.ndarray, prior: bool) -> np.ndarray:
-        indices, counts = np.unique(samples, return_counts=True)
         n_choices = self.n_choices
         # if we use prior, apply uniform prior so that the initial value is 1 / c
-        probs = np.full(n_choices, self._uniform * prior)
+        probs = np.full(n_choices, self._uniform * prior * self._weights[-1])
 
+        weights = self._weights[:-1] if prior else self._weights
+        masks = samples == np.arange(n_choices)[:, np.newaxis]
         slicer = np.arange(n_choices)
-        for idx, count in zip(indices, counts):
-            probs[slicer != idx] += count * self._bottom
-            probs[slicer == idx] += count * self._top
+        for c, mask in enumerate(masks):
+            weight = np.sum(weights[mask])
+            probs[slicer != c] += weight * self._bottom
+            probs[slicer == c] += weight * self._top
 
-        probs *= self._weight
         return probs
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:

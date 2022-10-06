@@ -24,5 +24,5 @@ config2type = {
 }
 
 
-def uniform_weight(size: int) -> float:
-    return 1.0 / size
+def uniform_weight(size: int) -> np.ndarray:
+    return np.ones(size) / size

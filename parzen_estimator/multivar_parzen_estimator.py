@@ -1,4 +1,4 @@
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import ConfigSpace as CS
 
@@ -24,7 +24,11 @@ SampleDataType = Union[List[np.ndarray], np.ndarray, Dict[str, np.ndarray]]
 
 
 class MultiVariateParzenEstimator:
-    def __init__(self, parzen_estimators: Dict[str, ParzenEstimatorType]):
+    def __init__(
+        self,
+        parzen_estimators: Dict[str, ParzenEstimatorType],
+        weights: Optional[np.ndarray] = None,
+    ):
         """
         MultiVariateParzenEstimator.
 
@@ -42,7 +46,7 @@ class MultiVariateParzenEstimator:
         self._param_names = list(parzen_estimators.keys())
         self._dim = len(parzen_estimators)
         self._size = list(parzen_estimators.values())[0].size
-        self._weight = uniform_weight(self._size)
+        self._weights = uniform_weight(self._size) if weights is None else weights.copy()
         self._hypervolume = np.prod([float(pe.domain_size) for pe in parzen_estimators.values()])
 
         if any(pe.size != self._size for pe in parzen_estimators.values()):
@@ -113,7 +117,7 @@ class MultiVariateParzenEstimator:
         for d, (hp_name, pe) in enumerate(self._parzen_estimators.items()):
             blls[d] += pe.basis_loglikelihood(_X[d])
 
-        config_ll = compute_config_loglikelihoods(blls, self._weight)
+        config_ll = compute_config_loglikelihoods(blls, self._weights)
         return config_ll
 
     def pdf(self, X: SampleDataType) -> np.ndarray:
