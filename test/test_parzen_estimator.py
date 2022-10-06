@@ -23,6 +23,12 @@ config2type = {
 }
 
 
+def dummy_weight_func(size: int) -> np.ndarray:
+    weights = np.arange(size).astype(np.float64) + 1
+    weights /= weights.sum()
+    return weights
+
+
 def test_get_min_bandwidth() -> None:
     config_space = CS.ConfigurationSpace()
     config_space.add_hyperparameters(
@@ -91,6 +97,15 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         assert pe._stds.size == samples.size + 1
         assert np.allclose(pe._weights, np.ones(samples.size + 1) / (samples.size + 1))
 
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=False, weight_func=dummy_weight_func)
+        assert np.allclose(pe._means, samples)
+        assert pe._stds.size == samples.size
+        assert np.allclose(pe._weights, dummy_weight_func(samples.size))
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=True, weight_func=dummy_weight_func)
+        assert np.allclose(pe._means, list(samples) + [0])
+        assert pe._stds.size == samples.size + 1
+        assert np.allclose(pe._weights, dummy_weight_func(samples.size + 1))
+
     def test_cdf_discrete(self) -> None:
         lb, ub = -50, 50
         samples = np.array([-2, -1, 0, 1, 2])
@@ -104,10 +119,34 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         ]
         assert np.allclose(ans, cdf_vals)
 
+        pe = NumericalParzenEstimator(samples=np.array([0]), lb=lb, ub=ub, q=1, weight_func=dummy_weight_func)
+        integral_lb, integral_ub = pe.cdf(lb), pe.cdf(ub)
+        assert np.allclose(integral_ub - integral_lb, 1.0)
+        assert pe._weights.size == 2
+        assert np.allclose(pe._weights, dummy_weight_func(2))
+        cdf_vals = pe.cdf(samples) - integral_lb
+        ans = [
+            [0.02275013, 0.15865525, 0.5, 0.84134475, 0.97724987],
+            [0.47916481, 0.48958188, 0.5, 0.51041812, 0.52083519],
+        ]
+        assert np.allclose(ans, cdf_vals)
+
     def test_basis_loglikelihood_discrete(self) -> None:
         lb, ub = -50, 50
         samples = np.array([-2, -1, 0, 1, 2])
         pe = NumericalParzenEstimator(samples=np.array([0]), lb=lb, ub=ub, q=1)
+        bll_vals = pe.basis_loglikelihood(samples)
+        ans = [
+            [-2.803501047738798, -1.4199324821566262, -0.9599163336956227, -1.419932482156626, -2.803501047738798],
+            [-4.564396550490211, -4.5642465517402, -4.564196552156876, -4.564246551740179, -4.564396550490211],
+        ]
+        assert np.allclose(ans, bll_vals)
+
+        # Calculate the integral
+        bll = pe.basis_loglikelihood(np.linspace(lb, ub, 100000))
+        assert 0.99 <= np.exp(bll).mean() * (ub - lb) <= 1.01
+
+        pe = NumericalParzenEstimator(samples=np.array([0]), lb=lb, ub=ub, q=1, weight_func=dummy_weight_func)
         bll_vals = pe.basis_loglikelihood(samples)
         ans = [
             [-2.803501047738798, -1.4199324821566262, -0.9599163336956227, -1.419932482156626, -2.803501047738798],
@@ -286,6 +325,16 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         with pytest.raises(TypeError):
             pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1.0, dtype=np.int32)
 
+        samples = np.array([0, 1, 2, 3] * 10)
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, weight_func=dummy_weight_func)
+        x = np.linspace(-3, 3, 1000)
+        bll = pe.basis_loglikelihood(x)
+        assert np.allclose(pe.pdf(x), pe(x))
+        # Calculate integral
+        assert 0.99 < pe.pdf(x).mean() * (ub - lb) < 1.01
+        assert np.allclose(pe._weights, dummy_weight_func(41))
+        assert np.allclose(np.exp(bll + np.log(pe._weights)[:, np.newaxis]).sum(axis=0), pe.pdf(x))
+
     def test_sample_by_indices(self) -> None:
         lb, ub = -10, 10
         samples = np.arange(-10, 11)
@@ -338,6 +387,16 @@ class TestCategoricalParzenEstimator(unittest.TestCase):
         assert np.allclose(pe._probs, np.array([0.475, 0.475, 0.05]))
         pe = CategoricalParzenEstimator(samples=samples, n_choices=3, top=0.9, prior=True)
         assert np.allclose(pe._probs, np.array([0.42777778, 0.42777778, 0.14444444]))
+
+        pe = CategoricalParzenEstimator(
+            samples=samples, n_choices=3, top=1.0, prior=False, weight_func=dummy_weight_func
+        )
+        assert np.allclose(pe._probs, np.array([1 / 3, 2 / 3, 0.00]))
+        pe = CategoricalParzenEstimator(
+            samples=samples, n_choices=3, top=1.0, prior=True, weight_func=dummy_weight_func
+        )
+        # [1]
+        assert np.allclose(pe._probs, np.array([1 / 3, 1 / 2, 1 / 6]))
 
     def test_sample(self) -> None:
         rng = np.random.RandomState()
@@ -415,6 +474,14 @@ class TestCategoricalParzenEstimator(unittest.TestCase):
         assert 0.99 < pe.pdf(x).sum() < 1.01
         assert np.allclose(pe.pdf(x), [0.25] * 4)
 
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=0.7, weight_func=dummy_weight_func)
+        assert pe.size == 41
+        x = np.arange(4)
+        assert np.allclose(pe.pdf(x), pe(x))
+        # Calculate integral
+        assert 0.99 < pe.pdf(x).sum() < 1.01
+        assert np.allclose(pe.pdf(x), [0.23954704, 0.24651568, 0.25348432, 0.26045296])
+
         samples = np.array([0])
         top = 0.7
         pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=top)
@@ -424,6 +491,13 @@ class TestCategoricalParzenEstimator(unittest.TestCase):
         assert 0.99 < pe.pdf(x).sum() < 1.01
         high = (top + 0.25) / 2
         assert np.allclose(pe.pdf(x), [high] + [(1 - high) / 3] * 3)
+
+        pe = CategoricalParzenEstimator(samples=samples, n_choices=4, top=top, weight_func=dummy_weight_func)
+        assert np.allclose(pe.pdf(x), pe(x))
+        # Calculate integral
+        assert 0.99 < pe.pdf(x).sum() < 1.01
+        # 0.7 0.1 0.1 0.1 / 0.25 0.25 0.25 0.25
+        assert np.allclose(pe.pdf(x), [0.7 / 3 + 0.25 * 2 / 3] + [0.1 / 3 + 0.25 * 2 / 3] * 3)
 
     def test_sample_by_indices(self) -> None:
         samples = np.array([0, 1, 2, 3])
