@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Optional, Tuple, Type, Union
+from typing import Callable, Optional, Tuple, Type, Union
 
 import ConfigSpace as CS
 
@@ -177,11 +177,13 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         dtype: Type[Union[np.number, int, float]] = np.float64,
         min_bandwidth_factor: float = 1e-2,
         prior: bool = True,
+        weight_func: Callable[[int], np.ndarray] = uniform_weight,
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
         self._hard_lb = hard_lb if hard_lb is not None else lb
         self._hard_ub = hard_ub if hard_ub is not None else ub
+        self._weight_func = weight_func
         self._size = samples.size + prior
         self._dtype: Type[np.number]
         self._validate(dtype, samples)
@@ -285,7 +287,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         """
         domain_range = self.ub - self.lb
         means = np.append(samples, 0.5 * (self.lb + self.ub)) if prior else samples.copy()
-        self._weights = uniform_weight(means.size)
+        self._weights = self._weight_func(means.size)
         std = means.std(ddof=1)
 
         IQR = np.subtract.reduce(np.percentile(means, [75, 25]))
@@ -327,7 +329,15 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
 
 class CategoricalParzenEstimator(AbstractParzenEstimator):
-    def __init__(self, samples: np.ndarray, n_choices: int, top: float, *, prior: bool = True):
+    def __init__(
+        self,
+        samples: np.ndarray,
+        n_choices: int,
+        top: float,
+        *,
+        prior: bool = True,
+        weight_func: Callable[[int], np.ndarray] = uniform_weight,
+    ):
 
         self._validate(samples, n_choices)
 
@@ -338,7 +348,7 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
         # AitchisonAitkenKernel: p = top or (1 - top) / (c - 1)
         # UniformKernel: p = 1 / c
         self._top, self._bottom, self._uniform = top, (1 - top) / (n_choices - 1), 1.0 / n_choices
-        self._weights = uniform_weight(self.size)
+        self._weights = weight_func(self.size)
         self._probs = self._get_probs(samples, prior)
         bls = self._get_basislikelihoods(samples, prior)
         self._basis_loglikelihoods = np.log(bls)
@@ -478,6 +488,7 @@ def build_numerical_parzen_estimator(
     *,
     default_min_bandwidth_factor: float = 1e-2,
     prior: bool = True,
+    weight_func: Callable[[int], np.ndarray] = uniform_weight,
 ) -> NumericalParzenEstimator:
     """
     Build a numerical parzen estimator
@@ -487,6 +498,7 @@ def build_numerical_parzen_estimator(
         dtype (Type[np.number]): The data type of the hyperparameter
         vals (np.ndarray): The observed hyperparameter values
         is_ordinal (bool): Whether the configuration is ordinal
+        weight_func (Callable[[int], np.ndarray]): The func to return the weights of each basis.
 
     Returns:
         pe (NumericalParzenEstimator): Parzen estimator given a set of observations
@@ -508,13 +520,20 @@ def build_numerical_parzen_estimator(
         dtype=dtype,
         min_bandwidth_factor=min_bandwidth_factor,
         prior=prior,
+        weight_func=weight_func,
     )
 
     return pe
 
 
 def build_categorical_parzen_estimator(
-    config: CategoricalHPType, vals: np.ndarray, top: float = 1.0, *, prior: bool = True, vals_is_indices: bool = False
+    config: CategoricalHPType,
+    vals: np.ndarray,
+    top: float = 1.0,
+    *,
+    prior: bool = True,
+    weight_func: Callable[[int], np.ndarray] = uniform_weight,
+    vals_is_indices: bool = False,
 ) -> CategoricalParzenEstimator:
     """
     Build a categorical parzen estimator
@@ -523,6 +542,7 @@ def build_categorical_parzen_estimator(
         config (CategoricalHPType): Hyperparameter information from the ConfigSpace
         vals (np.ndarray): The observed hyperparameter values (i.e. symbols, but not indices)
         top (float): The hyperparameter to define the probability of the category.
+        weight_func (Callable[[int], np.ndarray]): The func to return the weights of each basis.
         vals_is_indices (bool): Whether the vals is an array of indices or choices.
 
     Returns:
@@ -543,6 +563,12 @@ def build_categorical_parzen_estimator(
                 f"the list of symbols {choices}, but got the list of indices."
             )
 
-    pe = CategoricalParzenEstimator(samples=choice_indices, n_choices=n_choices, top=top, prior=prior)
+    pe = CategoricalParzenEstimator(
+        samples=choice_indices,
+        n_choices=n_choices,
+        top=top,
+        prior=prior,
+        weight_func=weight_func,
+    )
 
     return pe
