@@ -99,6 +99,7 @@ class TestNumericalParzenEstimator(unittest.TestCase):
             means2, std2, IQR2 = pe._preproc_with_compress(samples, min_bandwidth_factor=1e-1, prior=False)
             assert np.isclose(std1, std2)
             assert np.isclose(IQR1, IQR2)
+            assert np.isclose(pe._weights.sum(), 1.0)
 
     def test_init_without_prior(self) -> None:
         lb, ub = -50, 50

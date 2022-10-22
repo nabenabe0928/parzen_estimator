@@ -303,6 +303,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         means = np.append(means, center) if prior else means
         counts = np.append(counts, 1) if prior else counts
         size = np.sum(counts)
+        self._weights = counts / size
 
         mu = (means @ counts) / size
         std = np.sqrt((means - mu) ** 2 @ counts / (size - 1))
