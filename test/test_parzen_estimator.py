@@ -85,6 +85,21 @@ class TestNumericalParzenEstimator(unittest.TestCase):
             with pytest.raises(ValueError):
                 NumericalParzenEstimator(**kwargs)
 
+    def test_preproc(self) -> None:
+        lb, ub = -2, 2
+        samples = np.array([-2, -1, 0, 1, 2])
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=False)
+
+        for samples in [
+            np.array([-2, -1, 0, 1, 2]),
+            np.array([-2, -1, 0, 1, 2] * 1000),
+            np.array([-2] * 100 + [-1] * 20 + [0] * 40 + [1] * 2000 + [2] * 0),
+        ]:
+            means1, std1, IQR1 = pe._preproc(samples, min_bandwidth_factor=1e-1, prior=False)
+            means2, std2, IQR2 = pe._preproc_with_compress(samples, min_bandwidth_factor=1e-1, prior=False)
+            assert np.isclose(std1, std2)
+            assert np.isclose(IQR1, IQR2)
+
     def test_init_without_prior(self) -> None:
         lb, ub = -50, 50
         samples = np.array([-2, -1, 0, 1, 2])

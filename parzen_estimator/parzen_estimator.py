@@ -188,6 +188,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         hard_lb: Optional[NumericType] = None,
         hard_ub: Optional[NumericType] = None,
         dtype: Type[Union[np.number, int, float]] = np.float64,
+        compress: bool = False,
         min_bandwidth_factor: float = 1e-2,
         prior: bool = True,
         weights: Optional[np.ndarray] = None,
@@ -201,7 +202,12 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._dtype: Type[np.number]
         self._validate(dtype, samples)
 
-        self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior)
+        self._means: np.ndarray
+        self._stds: np.ndarray
+        self._logpdf_consts: np.ndarray
+        self._norm_consts: np.ndarray
+
+        self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior, compress=compress)
 
     def __repr__(self) -> str:
         ret = f"{self.__class__.__name__}(\n\tlb={self.lb}, ub={self.ub}, q={self.q},\n"
@@ -281,7 +287,32 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         )
         return scaled_x.astype(self._dtype)
 
-    def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool) -> None:
+    def _preproc(
+        self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool
+    ) -> Tuple[np.ndarray, float, float]:
+        means = np.append(samples, 0.5 * (self.lb + self.ub)) if prior else samples.copy()
+        std = means.std(ddof=1)
+        IQR = np.subtract.reduce(np.percentile(means, [75, 25]))
+        return means, std, IQR
+
+    def _preproc_with_compress(
+        self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool
+    ) -> Tuple[np.ndarray, float, float]:
+        center = 0.5 * (self.lb + self.ub)
+        means, counts = np.unique(samples, return_counts=True)
+        means = np.append(means, center) if prior else means
+        counts = np.append(counts, 1) if prior else counts
+        size = np.sum(counts)
+
+        mu = (means @ counts) / size
+        std = np.sqrt((means - mu) ** 2 @ counts / (size - 1))
+        cum_counts = np.cumsum(counts)
+        idx_q25 = np.searchsorted(cum_counts, size // 4)
+        idx_q75 = np.searchsorted(cum_counts, size * 3 // 4)
+        IQR = means[idx_q75] - means[idx_q25]
+        return means, std, IQR
+
+    def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool, compress: bool) -> None:
         """
         Calculate parameters of KDE based on Scott's rule
 
@@ -300,10 +331,9 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                 * Wolfgang, H (2005) Nonparametric and Semiparametric Models
         """
         domain_range = self.ub - self.lb
-        means = np.append(samples, 0.5 * (self.lb + self.ub)) if prior else samples.copy()
-        std = means.std(ddof=1)
+        preproc = self._preproc_with_compress if compress else self._preproc
+        means, std, IQR = preproc(samples, min_bandwidth_factor, prior)
 
-        IQR = np.subtract.reduce(np.percentile(means, [75, 25]))
         bandwidth = 1.059 * min(IQR / 1.34, std) * means.size ** (-0.2)
         # 99% of samples will be confined in mean \pm 0.025 * domain_range (2.5 sigma)
         min_bandwidth = min_bandwidth_factor * domain_range
