@@ -101,6 +101,17 @@ class TestNumericalParzenEstimator(unittest.TestCase):
             assert np.isclose(IQR1, IQR2)
             assert np.isclose(pe._weights.sum(), 1.0)
 
+            pe.sample_by_indices(np.random.RandomState(), np.arange(samples.size))
+
+        samples = np.array([-1, 0, -2, -1, 0, 1, 2, 1, 2, 0])
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=True, compress=True)
+        pe.sample_by_indices(np.random.RandomState(), np.arange(samples.size + 1))
+        assert np.allclose(pe._index_to_basis_index, np.array([1, 2, 0, 1, 2, 3, 4, 3, 4, 2, 5]))
+
+        pe = NumericalParzenEstimator(samples=samples, lb=lb, ub=ub, q=1, prior=True, compress=False)
+        pe.sample_by_indices(np.random.RandomState(), np.arange(samples.size + 1))
+        assert np.allclose(pe._index_to_basis_index, np.arange(samples.size + 1))
+
     def test_init_without_prior(self) -> None:
         lb, ub = -50, 50
         samples = np.array([-2, -1, 0, 1, 2])

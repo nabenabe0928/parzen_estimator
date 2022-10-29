@@ -206,6 +206,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._stds: np.ndarray
         self._logpdf_consts: np.ndarray
         self._norm_consts: np.ndarray
+        self._index_to_basis_index: np.ndarray = np.arange(samples.size + prior)
 
         self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior, compress=compress)
 
@@ -268,6 +269,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         return norm_consts * 0.5 * (1.0 + erf(z))
 
     def _sample(self, rng: np.random.RandomState, idx: int) -> NumericType:
+        idx = self._index_to_basis_index[idx]
         while True:
             val = rng.normal(loc=self._means[idx], scale=self._stds[idx])
             if self._hard_lb <= val <= self._hard_ub:
@@ -299,7 +301,9 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool
     ) -> Tuple[np.ndarray, float, float]:
         center = 0.5 * (self.lb + self.ub)
-        means, counts = np.unique(samples, return_counts=True)
+        means, invs, counts = np.unique(samples, return_counts=True, return_inverse=True)
+
+        self._index_to_basis_index = np.append(invs, counts.size) if prior else invs
         means = np.append(means, center) if prior else means
         counts = np.append(counts, 1) if prior else counts
         size = np.sum(counts)
