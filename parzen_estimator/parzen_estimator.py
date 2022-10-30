@@ -20,13 +20,16 @@ from parzen_estimator.utils import erf, exp, log
 
 
 def _get_min_bandwidth_factor(
-    config: CS.hyperparameters, is_ordinal: bool, default_min_bandwidth_factor: float
+    config: CS.hyperparameters,
+    is_ordinal: bool,
+    default_min_bandwidth_factor: float,
+    default_min_bandwidth_factor_for_discrete: float,
 ) -> float:
 
     if config.meta is not None and "min_bandwidth_factor" in config.meta:
         return config.meta["min_bandwidth_factor"]
     if is_ordinal:
-        return 1.0 / len(config.sequence)
+        return default_min_bandwidth_factor_for_discrete / len(config.sequence)
 
     dtype = config2type[config.__class__.__name__]
     lb, ub, log, q = config.lower, config.upper, config.log, config.q
@@ -34,7 +37,7 @@ def _get_min_bandwidth_factor(
     if not log and (q is not None or dtype is int):
         q = q if q is not None else 1
         n_grids = int((ub - lb) / q) + 1
-        return 1.0 / n_grids
+        return default_min_bandwidth_factor_for_discrete / n_grids
 
     return default_min_bandwidth_factor
 
@@ -537,6 +540,7 @@ def build_numerical_parzen_estimator(
     is_ordinal: bool,
     *,
     default_min_bandwidth_factor: float = 1e-2,
+    default_min_bandwidth_factor_for_discrete: float = 1.0,
     prior: bool = True,
     weights: Optional[np.ndarray] = None,
 ) -> NumericalParzenEstimator:
@@ -549,12 +553,19 @@ def build_numerical_parzen_estimator(
         vals (np.ndarray): The observed hyperparameter values
         is_ordinal (bool): Whether the configuration is ordinal
         weights (Optional[np.ndarray]): The weights for each basis.
+        default_min_bandwidth_factor_for_discrete (float): .
+        default_min_bandwidth_factor (float): .
 
     Returns:
         pe (NumericalParzenEstimator): Parzen estimator given a set of observations
     """
-    min_bandwidth_factor = _get_min_bandwidth_factor(config, is_ordinal, default_min_bandwidth_factor)
-    q, log, lb, ub = _get_config_info(config, is_ordinal)
+    min_bandwidth_factor = _get_min_bandwidth_factor(
+        config=config,
+        is_ordinal=is_ordinal,
+        default_min_bandwidth_factor=default_min_bandwidth_factor,
+        default_min_bandwidth_factor_for_discrete=default_min_bandwidth_factor_for_discrete,
+    )
+    q, log, lb, ub = _get_config_info(config=config, is_ordinal=is_ordinal)
     q, hard_lb, hard_ub, lb, ub = _convert_info_for_discrete(dtype=dtype, q=q, log=log, lb=lb, ub=ub)
 
     if log:

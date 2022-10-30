@@ -61,7 +61,15 @@ def test_get_min_bandwidth() -> None:
     ):
         config = config_space.get_hyperparameter(f"x{d}")
         is_ordinal = config.__class__.__name__.startswith("Ordinal")
-        assert _get_min_bandwidth_factor(config, is_ordinal, default_min_bandwidth_factor=1e-2) == ans
+        assert (
+            _get_min_bandwidth_factor(
+                config,
+                is_ordinal,
+                default_min_bandwidth_factor=1e-2,
+                default_min_bandwidth_factor_for_discrete=1.0,
+            )
+            == ans
+        )
 
 
 def test_convert_info_for_log_scale() -> None:
