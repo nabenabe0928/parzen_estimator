@@ -550,6 +550,7 @@ def build_numerical_parzen_estimator(
     *,
     default_min_bandwidth_factor: float = 1e-2,
     default_min_bandwidth_factor_for_discrete: float = 1.0,
+    magic_clip: bool = False,
     prior: bool = True,
     weights: Optional[np.ndarray] = None,
 ) -> NumericalParzenEstimator:
@@ -564,6 +565,7 @@ def build_numerical_parzen_estimator(
         weights (Optional[np.ndarray]): The weights for each basis.
         default_min_bandwidth_factor_for_discrete (float): .
         default_min_bandwidth_factor (float): .
+        magic_clip (bool): Whether to apply the magic clipping in TPE.
 
     Returns:
         pe (NumericalParzenEstimator): Parzen estimator given a set of observations
@@ -591,6 +593,7 @@ def build_numerical_parzen_estimator(
         min_bandwidth_factor=min_bandwidth_factor,
         prior=prior,
         weights=weights,
+        magic_clip=magic_clip,
     )
 
     return pe
