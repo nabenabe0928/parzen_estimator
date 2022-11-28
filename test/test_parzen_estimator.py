@@ -103,8 +103,8 @@ class TestNumericalParzenEstimator(unittest.TestCase):
             np.array([-2, -1, 0, 1, 2] * 1000),
             np.array([-2] * 100 + [-1] * 20 + [0] * 40 + [1] * 2000 + [2] * 0),
         ]:
-            means1, std1, IQR1 = pe._preproc(samples, min_bandwidth_factor=1e-1, prior=False)
-            means2, std2, IQR2 = pe._preproc_with_compress(samples, min_bandwidth_factor=1e-1, prior=False)
+            means1, std1, IQR1 = pe._preproc(samples, prior=False)
+            means2, std2, IQR2 = pe._preproc_with_compress(samples, prior=False)
             assert np.isclose(std1, std2)
             assert np.isclose(IQR1, IQR2)
             assert np.isclose(pe._weights.sum(), 1.0)
@@ -166,25 +166,26 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         lb, ub = -50, 50
         samples = np.array([-2, -1, 0, 1, 2])
         pe = NumericalParzenEstimator(samples=np.array([0]), lb=lb, ub=ub, q=1)
-        integral_lb, integral_ub = pe.cdf(lb), pe.cdf(ub)
+        integral_lb, integral_ub = pe.cdf(pe.lb), pe.cdf(pe.ub)
         assert np.allclose(integral_ub - integral_lb, 1.0)
         cdf_vals = pe.cdf(samples) - integral_lb
         ans = [
-            [0.02275013, 0.15865525, 0.5, 0.84134475, 0.97724987],
-            [0.47916481, 0.48958188, 0.5, 0.51041812, 0.52083519],
+            [0.02384064, 0.16106286, 0.5, 0.83893714, 0.97615936],
+            [0.47937107, 0.48968503, 0.5, 0.51031497, 0.52062893],
         ]
+
         assert np.allclose(ans, cdf_vals)
 
         weights = dummy_weight_func(2)
         pe = NumericalParzenEstimator(samples=np.array([0]), lb=lb, ub=ub, q=1, weights=weights)
-        integral_lb, integral_ub = pe.cdf(lb), pe.cdf(ub)
+        integral_lb, integral_ub = pe.cdf(pe.lb), pe.cdf(pe.ub)
         assert np.allclose(integral_ub - integral_lb, 1.0)
         assert pe._weights.size == 2
         assert np.allclose(pe._weights, dummy_weight_func(2))
         cdf_vals = pe.cdf(samples) - integral_lb
         ans = [
-            [0.02275013, 0.15865525, 0.5, 0.84134475, 0.97724987],
-            [0.47916481, 0.48958188, 0.5, 0.51041812, 0.52083519],
+            [0.02384064, 0.16106286, 0.5, 0.83893713, 0.97615935],
+            [0.47937107, 0.48968503, 0.5, 0.51031496, 0.52062892],
         ]
         assert np.allclose(ans, cdf_vals)
 
@@ -194,8 +195,8 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         pe = NumericalParzenEstimator(samples=np.array([0]), lb=lb, ub=ub, q=1)
         bll_vals = pe.basis_loglikelihood(samples)
         ans = [
-            [-2.803501047738798, -1.4199324821566262, -0.9599163336956227, -1.419932482156626, -2.803501047738798],
-            [-4.564396550490211, -4.5642465517402, -4.564196552156876, -4.564246551740179, -4.564396550490211],
+            [-2.779088998373232, -1.420760163124337, -0.9690724391011272, -1.4207601631243367, -2.7790889983732328],
+            [-4.57434285851878, -4.574195815312573, -4.5741468009104995, -4.574195815312595, -4.574342858518759],
         ]
         assert np.allclose(ans, bll_vals)
 
@@ -207,9 +208,10 @@ class TestNumericalParzenEstimator(unittest.TestCase):
         pe = NumericalParzenEstimator(samples=np.array([0]), lb=lb, ub=ub, q=1, weights=weights)
         bll_vals = pe.basis_loglikelihood(samples)
         ans = [
-            [-2.803501047738798, -1.4199324821566262, -0.9599163336956227, -1.419932482156626, -2.803501047738798],
-            [-4.564396550490211, -4.5642465517402, -4.564196552156876, -4.564246551740179, -4.564396550490211],
+            [-2.779088998373232, -1.420760163124337, -0.9690724391011272, -1.4207601631243367, -2.7790889983732328],
+            [-4.57434285851878, -4.574195815312573, -4.5741468009104995, -4.574195815312595, -4.574342858518759],
         ]
+
         assert np.allclose(ans, bll_vals)
 
         # Calculate the integral

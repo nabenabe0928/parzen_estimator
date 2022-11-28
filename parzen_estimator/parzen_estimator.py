@@ -193,13 +193,14 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         dtype: Type[Union[np.number, int, float]] = np.float64,
         compress: bool = False,
         min_bandwidth_factor: float = 1e-2,
+        magic_clip: bool = False,
         prior: bool = True,
         weights: Optional[np.ndarray] = None,
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
-        self._hard_lb = hard_lb if hard_lb is not None else lb
-        self._hard_ub = hard_ub if hard_ub is not None else ub
+        self._hard_lb: NumericType = hard_lb if hard_lb is not None else lb
+        self._hard_ub: NumericType = hard_ub if hard_ub is not None else ub
         self._size = samples.size + prior
         self._weights = weights.copy() if weights is not None else uniform_weight(samples.size + prior)
         self._dtype: Type[np.number]
@@ -211,6 +212,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._norm_consts: np.ndarray
         self._index_to_basis_index: np.ndarray = np.arange(samples.size + prior)
 
+        min_bandwidth_factor = 1.0 / self._size if magic_clip else min_bandwidth_factor
         self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior, compress=compress)
 
     def __repr__(self) -> str:
@@ -219,13 +221,22 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
             ret += f"\t({i + 1}) weight: {w}, basis: GaussKernel(mean={m}, std={s}),\n"
         return ret + ")"
 
+    def _validate_discrete_info(self) -> None:
+        if self._q is None:
+            # Continuous
+            return
+
+        if self.lb == self._hard_lb or self.ub == self._hard_ub:
+            self._lb -= 0.5 * self._q
+            self._ub += 0.5 * self._q
+
     def _validate(self, dtype: Type[Union[np.number, int, float]], samples: np.ndarray) -> None:
         self._validate_weights()
         self._dtype = validate_and_update_dtype(dtype=dtype)
         self._q = validate_and_update_q(dtype=self._dtype, q=self.q)
-        lb, ub, q = self.lb, self.ub, self.q
-        if np.any(samples < lb) or np.any(samples > ub):
-            raise ValueError(f"All the samples must be in [{lb}, {ub}].")
+        q = self.q
+        if np.any(samples < self._hard_lb) or np.any(samples > self._hard_ub):
+            raise ValueError(f"All the samples must be in [{self._hard_lb}, {self._hard_ub}].")
         if q is not None:
             valid_vals = np.linspace(self._hard_lb, self._hard_ub, self.domain_size)
             cands = np.unique(samples)
@@ -235,6 +246,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                     "All the samples for q != None must be discritized appropriately."
                     f" Expected each value to be in {valid_vals}, but got {cands}"
                 )
+
+        self._validate_discrete_info()
 
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
         if self.q is None:
@@ -286,24 +299,20 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         return np.array([self._sample(rng, idx) for idx in indices])
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
-        scaled_x = self.lb + x * (self.ub - self.lb)
+        scaled_x = self._hard_lb + x * (self._hard_ub - self._hard_lb)
         scaled_x = (
             scaled_x if self.q is None else np.round((scaled_x - self._hard_lb) / self.q) * self.q + self._hard_lb
         )
         return scaled_x.astype(self._dtype)
 
-    def _preproc(
-        self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool
-    ) -> Tuple[np.ndarray, float, float]:
-        means = np.append(samples, 0.5 * (self.lb + self.ub)) if prior else samples.copy()
+    def _preproc(self, samples: np.ndarray, prior: bool) -> Tuple[np.ndarray, float, float]:
+        means = np.append(samples, 0.5 * (self._hard_lb + self._hard_ub)) if prior else samples.copy()
         std = means.std(ddof=1)
         IQR = np.subtract.reduce(np.percentile(means, [75, 25]))
         return means, std, IQR
 
-    def _preproc_with_compress(
-        self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool
-    ) -> Tuple[np.ndarray, float, float]:
-        center = 0.5 * (self.lb + self.ub)
+    def _preproc_with_compress(self, samples: np.ndarray, prior: bool) -> Tuple[np.ndarray, float, float]:
+        center = 0.5 * (self._hard_lb + self._hard_ub)
         means, invs, counts = np.unique(samples, return_counts=True, return_inverse=True)
 
         self._index_to_basis_index = np.append(invs, counts.size) if prior else invs
@@ -340,7 +349,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         """
         domain_range = self.ub - self.lb
         preproc = self._preproc_with_compress if compress else self._preproc
-        means, std, IQR = preproc(samples, min_bandwidth_factor, prior)
+        means, std, IQR = preproc(samples, prior)
 
         bandwidth = 1.059 * min(IQR / 1.34, std) * means.size ** (-0.2)
         # 99% of samples will be confined in mean \pm 0.025 * domain_range (2.5 sigma)
