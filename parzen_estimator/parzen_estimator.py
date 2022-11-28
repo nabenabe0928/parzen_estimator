@@ -212,7 +212,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._norm_consts: np.ndarray
         self._index_to_basis_index: np.ndarray = np.arange(samples.size + prior)
 
-        min_bandwidth_factor = 1.0 / self._size if magic_clip else min_bandwidth_factor
+        min_bandwidth_factor = max(min_bandwidth_factor, 1.0 / self._size) if magic_clip else min_bandwidth_factor
         self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior, compress=compress)
 
     def __repr__(self) -> str:
