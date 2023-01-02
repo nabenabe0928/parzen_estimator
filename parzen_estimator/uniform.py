@@ -42,11 +42,7 @@ class NumericalUniform(AbstractParzenEstimator):
         return scaled_x.astype(self._dtype)
 
     def pdf(self, x: np.ndarray) -> np.ndarray:
-        if self.q is None:
-            return np.full(x.size, 1.0 / self.domain_size)
-        else:
-            n_choices = int(self.domain_size / self.q + 1 + 0.5)
-            return np.full(x.size, 1.0 / n_choices)
+        return np.full(x.size, 1.0 / self.domain_size)
 
     def basis_loglikelihood(self, x: np.ndarray) -> np.ndarray:
         raise NotImplementedError(f"{self.__class__.__name__} does not have basis.")

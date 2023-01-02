@@ -62,6 +62,9 @@ class MultiVariateParzenEstimator:
             [f"({idx + 1}): {hp_name}\n{pe}" for idx, (hp_name, pe) in enumerate(self._parzen_estimators.items())]
         )
 
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        return self.pdf(x)
+
     def __len__(self) -> int:
         return self._dim
 

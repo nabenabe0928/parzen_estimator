@@ -220,6 +220,7 @@ class TestMultiVariateParzenEstimator(unittest.TestCase):
             log_pdf_vals = mvpe.log_pdf(X)
             assert pdf_vals.size == size
             assert np.allclose(pdf_vals, np.exp(log_pdf_vals))
+            assert np.allclose(pdf_vals, mvpe(X))
 
     def test_pdf_by_integral(self) -> None:
         lb, ub, n_choices, size = -3, 3, 4, 10
