@@ -24,7 +24,7 @@ class NumericalUniform(AbstractParzenEstimator):
         self._q = validate_and_update_q(dtype=self._dtype, q=q)
 
     def __repr__(self) -> str:
-        ret = f"{self.__class__.__name__}(\tlb={self.lb}, ub={self.ub}, q={self.q})"
+        ret = f"{self.__class__.__name__}(lb={self.lb}, ub={self.ub}, q={self.q})"
         return ret
 
     def sample(self, rng: np.random.RandomState, n_samples: int) -> np.ndarray:
