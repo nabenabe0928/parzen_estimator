@@ -6,8 +6,8 @@ repos:
         args: [--show-error-codes]
         name: mypy check
         files: parzen_estimator
-  - repo: https://gitlab.com/pycqa/flake8
-    rev: 3.8.3
+  - repo: https://github.com/pycqa/flake8.git
+    rev: 3.9.2
     hooks:
       - id: flake8
         name: flake8 check
