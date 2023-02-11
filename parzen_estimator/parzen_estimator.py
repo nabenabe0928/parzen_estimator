@@ -482,7 +482,7 @@ def build_numerical_parzen_estimator(
     is_ordinal: bool,
     *,
     default_min_bandwidth_factor: float = 1e-2,
-    default_min_bandwidth_factor_for_discrete: float = 1.0,
+    default_min_bandwidth_factor_for_discrete: Optional[float] = 1.0,
     magic_clip: bool = False,
     prior: bool = True,
     weights: Optional[np.ndarray] = None,

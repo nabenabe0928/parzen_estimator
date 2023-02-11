@@ -49,18 +49,19 @@ def _get_min_bandwidth_factor(
     config: CS.hyperparameters,
     is_ordinal: bool,
     default_min_bandwidth_factor: float,
-    default_min_bandwidth_factor_for_discrete: float,
+    default_min_bandwidth_factor_for_discrete: Optional[float],
 ) -> float:
 
+    disc_exist = default_min_bandwidth_factor_for_discrete is not None
     if config.meta is not None and "min_bandwidth_factor" in config.meta:
         return config.meta["min_bandwidth_factor"]
-    if is_ordinal:
+    if is_ordinal and disc_exist:
         return default_min_bandwidth_factor_for_discrete / len(config.sequence)
 
     dtype = config2type[config.__class__.__name__]
     lb, ub, log, q = config.lower, config.upper, config.log, config.q
 
-    if not log and (q is not None or dtype is int):
+    if not log and (q is not None or dtype is int) and disc_exist:
         q = q if q is not None else 1
         n_grids = int((ub - lb) / q) + 1
         return default_min_bandwidth_factor_for_discrete / n_grids
