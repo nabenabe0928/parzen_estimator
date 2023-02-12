@@ -387,6 +387,11 @@ class CategoricalParzenEstimator(AbstractParzenEstimator):
             probs[slicer != c] += weight * self._bottom
             probs[slicer == c] += weight * self._top
 
+        if not np.isclose(np.sum(probs), 1.0):
+            raise ValueError(f"Probabilities do not sum to 1, but got {probs}")
+        else:
+            probs /= np.sum(probs)
+
         return probs
 
     def uniform_to_valid_range(self, x: np.ndarray) -> np.ndarray:
