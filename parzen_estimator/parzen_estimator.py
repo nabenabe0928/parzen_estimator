@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Optional, Tuple, Type, Union
+from typing import Optional, Literal, Tuple, Type, Union
 
 import numpy as np
 
@@ -22,6 +22,10 @@ from parzen_estimator.utils import (
     validate_and_update_dtype,
     validate_and_update_q,
 )
+
+
+HYPEROPT = "hyperopt"
+OPTUNA = "optuna"
 
 
 class AbstractParzenEstimator(metaclass=ABCMeta):
@@ -114,6 +118,8 @@ class AbstractParzenEstimator(metaclass=ABCMeta):
 
 
 class NumericalParzenEstimator(AbstractParzenEstimator):
+    _HEURISTICS = [HYPEROPT, OPTUNA]
+
     def __init__(
         self,
         samples: np.ndarray,
@@ -129,7 +135,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         magic_clip: bool = False,
         prior: bool = True,
         weights: Optional[np.ndarray] = None,
-        heuristic: bool = False,
+        heuristic: Optional[Literal["hyperopt", "optuna"]] = None,
+        space_dim: Optional[int] = None,
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
@@ -137,6 +144,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._hard_ub: NumericType = hard_ub if hard_ub is not None else ub
         self._size = samples.size + prior
         self._heuristic = heuristic
+        self._space_dim = space_dim
         self._weights = weights.copy() if weights is not None else uniform_weight(samples.size + prior)
         self._dtype: Type[np.number]
         self._validate(dtype, samples)
@@ -264,7 +272,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         IQR = means[idx_q75] - means[idx_q25]
         return means, std, IQR
 
-    def _bandwidth_heuristic_bergstra(self, samples: np.ndarray, prior: bool) -> Tuple[np.ndarray, np.ndarray]:
+    def _bandwidth_heuristic_hyperopt(self, samples: np.ndarray, prior: bool) -> Tuple[np.ndarray, np.ndarray]:
         """
         Calculate the bandwidth based on the 2011 version of TPE.
 
@@ -284,6 +292,19 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         )
         return means, sorted_bandwidth[np.argsort(order)]
 
+    def _bandwidth_heuristic_optuna(self, samples: np.ndarray, prior: bool) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate the bandwidth based on Optuna v3.0 TPE.
+        """
+        if self._space_dim is None:
+            raise ValueError("space_dim (the dimension of the space) must be provided for Optuna bandwidth.")
+
+        domain_range = self._hard_ub - self._hard_lb
+        means = np.append(samples, 0.5 * (self._hard_lb + self._hard_ub)) if prior else samples.copy()
+        size = max(1, means.size)
+        bandwidth = np.full_like(means, 0.2 * domain_range * size ** (- 1.0 / (self._space_dim + 4.0)))
+        return means, bandwidth
+
     def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool, compress: bool) -> None:
         """
         Calculate parameters of KDE based on Scott's rule
@@ -302,10 +323,15 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                   density estimation: a review of fully automatic selector
                 * Wolfgang, H (2005) Nonparametric and Semiparametric Models
         """
+        if self._heuristic is not None and self._heuristic not in self._HEURISTICS:
+            raise ValueError(f"heuristic must be in {self._HEURISTICS}, but got {self._heuristic}")
+
         domain_range = self.ub - self.lb
         min_bandwidth = min_bandwidth_factor * domain_range
-        if self._heuristic:
-            means, bandwidth = self._bandwidth_heuristic_bergstra(samples, prior)
+        if self._heuristic == HYPEROPT:
+            means, bandwidth = self._bandwidth_heuristic_hyperopt(samples, prior)
+        elif self._heuristic == OPTUNA:
+            means, bandwidth = self._bandwidth_heuristic_optuna(samples, prior)
         else:
             preproc = self._preproc_with_compress if compress else self._preproc
             means, std, IQR = preproc(samples, prior)
