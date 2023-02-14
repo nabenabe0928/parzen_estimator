@@ -543,6 +543,7 @@ def build_numerical_parzen_estimator(
     prior: bool = True,
     weights: Optional[np.ndarray] = None,
     heuristic: Optional[Literal["hyperopt", "optuna"]] = None,
+    space_dim: Optional[int] = None,
 ) -> NumericalParzenEstimator:
     """
     Build a numerical parzen estimator
@@ -585,6 +586,7 @@ def build_numerical_parzen_estimator(
         weights=weights,
         magic_clip=magic_clip,
         heuristic=heuristic,
+        space_dim=space_dim,
     )
 
     return pe
