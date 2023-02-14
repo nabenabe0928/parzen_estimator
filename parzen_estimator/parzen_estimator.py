@@ -129,12 +129,14 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         magic_clip: bool = False,
         prior: bool = True,
         weights: Optional[np.ndarray] = None,
+        heuristic: bool = False,
     ):
 
         self._lb, self._ub, self._q = lb, ub, q
         self._hard_lb: NumericType = hard_lb if hard_lb is not None else lb
         self._hard_ub: NumericType = hard_ub if hard_ub is not None else ub
         self._size = samples.size + prior
+        self._heuristic = heuristic
         self._weights = weights.copy() if weights is not None else uniform_weight(samples.size + prior)
         self._dtype: Type[np.number]
         self._validate(dtype, samples)
@@ -262,6 +264,26 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         IQR = means[idx_q75] - means[idx_q25]
         return means, std, IQR
 
+    def _bandwidth_heuristic_bergstra(self, samples: np.ndarray, prior: bool) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Calculate the bandwidth based on the 2011 version of TPE.
+
+        Reference:
+            J. Bergstra et al. (2011) Algorithms for hyper-parameter optimization.
+        """
+        means = np.append(samples, 0.5 * (self._hard_lb + self._hard_ub)) if prior else samples.copy()
+        order = np.argsort(means)
+
+        sorted_means = np.empty(means.size + 2, dtype=np.float64)
+        sorted_means[1:-1] = means[order]
+        sorted_means[0], sorted_means[-1] = self._hard_lb, self._hard_ub
+
+        sorted_bandwidth = np.maximum(
+            sorted_means[1:-1] - sorted_means[:-2],
+            sorted_means[2:] - sorted_means[1:-1],
+        )
+        return means, sorted_bandwidth[np.argsort(order)]
+
     def _calculate(self, samples: np.ndarray, min_bandwidth_factor: float, prior: bool, compress: bool) -> None:
         """
         Calculate parameters of KDE based on Scott's rule
@@ -281,13 +303,16 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
                 * Wolfgang, H (2005) Nonparametric and Semiparametric Models
         """
         domain_range = self.ub - self.lb
-        preproc = self._preproc_with_compress if compress else self._preproc
-        means, std, IQR = preproc(samples, prior)
-
-        bandwidth = 1.059 * min(IQR / 1.34, std) * means.size ** (-0.2)
-        # 99% of samples will be confined in mean \pm 0.025 * domain_range (2.5 sigma)
         min_bandwidth = min_bandwidth_factor * domain_range
-        clipped_bandwidth = np.ones_like(means) * np.clip(bandwidth, min_bandwidth, 0.5 * domain_range)
+        if self._heuristic:
+            means, bandwidth = self._bandwidth_heuristic_bergstra(samples, prior)
+        else:
+            preproc = self._preproc_with_compress if compress else self._preproc
+            means, std, IQR = preproc(samples, prior)
+            bandwidth = np.full_like(means, 1.059 * min(IQR / 1.34, std) * means.size ** (-0.2))
+
+        # 99% of samples will be confined in mean \pm 0.025 * domain_range (2.5 sigma)
+        clipped_bandwidth = np.clip(bandwidth, min_bandwidth, 0.5 * domain_range)
         if prior:
             clipped_bandwidth[-1] = domain_range  # The bandwidth for the prior
 
