@@ -250,7 +250,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
 
     def _preproc(self, samples: np.ndarray, prior: bool) -> Tuple[np.ndarray, float, float]:
         means = np.append(samples, 0.5 * (self._hard_lb + self._hard_ub)) if prior else samples.copy()
-        std = means.std(ddof=1)
+        std = means.std(ddof=int(means.size > 1))
         IQR = np.subtract.reduce(np.percentile(means, [75, 25]))
         return means, std, IQR
 
@@ -265,7 +265,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._weights = counts / size
 
         mu = (means @ counts) / size
-        std = np.sqrt((means - mu) ** 2 @ counts / (size - 1))
+        std = np.sqrt((means - mu) ** 2 @ counts / max(1, size - 1))
         cum_counts = np.cumsum(counts)
         idx_q25 = np.searchsorted(cum_counts, size // 4)
         idx_q75 = np.searchsorted(cum_counts, size * 3 // 4)
