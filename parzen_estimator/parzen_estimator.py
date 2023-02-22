@@ -133,6 +133,7 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         compress: bool = False,
         min_bandwidth_factor: float = 1e-2,
         magic_clip: bool = False,
+        magic_clip_exponent: float = 1.0,
         prior: bool = True,
         weights: Optional[np.ndarray] = None,
         heuristic: Optional[Literal["hyperopt", "optuna"]] = None,
@@ -155,7 +156,8 @@ class NumericalParzenEstimator(AbstractParzenEstimator):
         self._norm_consts: np.ndarray
         self._index_to_basis_index: np.ndarray = np.arange(samples.size + prior)
 
-        min_bandwidth_factor = max(min_bandwidth_factor, 1.0 / self._size) if magic_clip else min_bandwidth_factor
+        magic_factor = 1.0 / self._size ** magic_clip_exponent
+        min_bandwidth_factor = max(min_bandwidth_factor, magic_factor) if magic_clip else min_bandwidth_factor
         self._calculate(samples=samples, min_bandwidth_factor=min_bandwidth_factor, prior=prior, compress=compress)
 
     def __repr__(self) -> str:
@@ -540,6 +542,7 @@ def build_numerical_parzen_estimator(
     default_min_bandwidth_factor: float = 1e-2,
     default_min_bandwidth_factor_for_discrete: Optional[float] = 1.0,
     magic_clip: bool = False,
+    magic_clip_exponent: float = 1.0,
     prior: bool = True,
     weights: Optional[np.ndarray] = None,
     heuristic: Optional[Literal["hyperopt", "optuna"]] = None,
@@ -585,6 +588,7 @@ def build_numerical_parzen_estimator(
         prior=prior,
         weights=weights,
         magic_clip=magic_clip,
+        magic_clip_exponent=magic_clip_exponent,
         heuristic=heuristic,
         space_dim=space_dim,
     )

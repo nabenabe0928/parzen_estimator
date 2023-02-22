@@ -17,7 +17,7 @@ from parzen_estimator.uniform import (
 )
 
 
-__version__ = "0.5.6"
+__version__ = "0.5.7"
 __copyright__ = "Copyright (C) 2023 Shuhei Watanabe"
 __licence__ = "Apache-2.0 License"
 __author__ = "Shuhei Watanabe"
